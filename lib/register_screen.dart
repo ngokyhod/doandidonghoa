@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
-
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
 }
@@ -19,7 +18,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _handleRegister() async {
     if (_nameCtrl.text.isEmpty || _emailCtrl.text.isEmpty || _passCtrl.text.isEmpty) {
-      _showMsg("Vui lòng nhập đầy đủ thông tin", isError: true);
+      _showMsg("Vui lòng nhập đủ thông tin", isError: true);
       return;
     }
     if (_passCtrl.text != _confirmPassCtrl.text) {
@@ -29,31 +28,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isLoading = true);
     try {
-      // 1. Tạo tài khoản Auth
+      // 1. Tạo user bên Authentication
       final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailCtrl.text.trim(),
         password: _passCtrl.text.trim(),
       );
 
-      // 2. Lưu thông tin bổ sung vào Firestore (Bảng users)
+      // 2. Lưu thông tin phụ vào Firestore (Database)
       if (userCredential.user != null) {
+        // Dòng này trả lời câu hỏi của bạn: Ta dùng user.uid làm ID cho document luôn
         await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
           'uid': userCredential.user!.uid,
           'fullName': _nameCtrl.text.trim(),
           'email': _emailCtrl.text.trim(),
           'role': 'farmer', // Mặc định là nông dân
           'createdAt': FieldValue.serverTimestamp(),
+          'phoneNumber': '',
+          'address': '',
         });
+
+        // Cập nhật tên hiển thị cho User Auth
+        await userCredential.user!.updateDisplayName(_nameCtrl.text.trim());
       }
 
-      _showMsg("Đăng ký thành công! Hãy đăng nhập.");
-      if (mounted) context.pop(); // Quay lại trang Login
-
+      _showMsg("Đăng ký thành công!");
+      // Không cần context.go('/') vì main.dart sẽ tự chuyển khi thấy user đã login
     } on FirebaseAuthException catch (e) {
-      String msg = "Đăng ký thất bại";
-      if (e.code == 'email-already-in-use') msg = "Email này đã được sử dụng";
-      if (e.code == 'weak-password') msg = "Mật khẩu quá yếu (cần > 6 ký tự)";
+      String msg = "Lỗi đăng ký: ${e.code}";
+      if (e.code == 'email-already-in-use') msg = "Email này đã có người dùng";
+      if (e.code == 'weak-password') msg = "Mật khẩu quá yếu";
       _showMsg(msg, isError: true);
+    } catch (e) {
+      _showMsg("Lỗi: $e", isError: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -68,101 +74,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => context.pop(),
-        ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Tạo tài khoản mới',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Điền thông tin bên dưới để tham gia AgriMarket',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-              const SizedBox(height: 40),
-
-              // Form nhập liệu
-              _buildTextField(label: "Họ và tên", icon: Icons.person_outline, controller: _nameCtrl),
-              const SizedBox(height: 16),
-              _buildTextField(label: "Email", icon: Icons.email_outlined, controller: _emailCtrl, inputType: TextInputType.emailAddress),
-              const SizedBox(height: 16),
-              _buildTextField(label: "Mật khẩu", icon: Icons.lock_outline, controller: _passCtrl, isPass: true),
-              const SizedBox(height: 16),
-              _buildTextField(label: "Nhập lại mật khẩu", icon: Icons.lock_outline, controller: _confirmPassCtrl, isPass: true),
-
-              const SizedBox(height: 32),
-
-              // Nút Đăng ký
-              SizedBox(
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _handleRegister,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    elevation: 2,
-                  ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('ĐĂNG KÝ', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text("Đã có tài khoản? ", style: TextStyle(color: Colors.grey)),
-                  GestureDetector(
-                    onTap: () => context.pop(), // Quay lại trang Login
-                    child: const Text("Đăng nhập", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Widget con để code gọn hơn
-  Widget _buildTextField({
-    required String label,
-    required IconData icon,
-    required TextEditingController controller,
-    bool isPass = false,
-    TextInputType inputType = TextInputType.text,
-  }) {
-    return TextField(
-      controller: controller,
-      obscureText: isPass,
-      keyboardType: inputType,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Colors.green, width: 2),
+      appBar: AppBar(title: const Text("Đăng ký")),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: "Họ tên")),
+            const SizedBox(height: 12),
+            TextField(controller: _emailCtrl, decoration: const InputDecoration(labelText: "Email")),
+            const SizedBox(height: 12),
+            TextField(controller: _passCtrl, obscureText: true, decoration: const InputDecoration(labelText: "Mật khẩu")),
+            const SizedBox(height: 12),
+            TextField(controller: _confirmPassCtrl, obscureText: true, decoration: const InputDecoration(labelText: "Nhập lại mật khẩu")),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _isLoading ? null : _handleRegister,
+              child: _isLoading ? const CircularProgressIndicator() : const Text("ĐĂNG KÝ"),
+            ),
+            TextButton(
+              onPressed: () => context.go('/login'),
+              child: const Text("Đã có tài khoản? Đăng nhập"),
+            )
+          ],
         ),
       ),
     );

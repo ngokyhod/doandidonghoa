@@ -56,3 +56,7 @@ dependencies {
     // Add the dependencies for any other desired Firebase products
     // https://firebase.google.com/docs/android/setup#available-libraries
 }
+tasks.register<Wrapper>("wrapper") {
+    gradleVersion = "8.7"
+    distributionType = Wrapper.DistributionType.ALL
+}
