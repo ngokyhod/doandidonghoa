@@ -41,12 +41,13 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCJRutc47RqJzjqdDFq2At4SvSOd8BvgmQ',
-    appId: '1:552098486468:web:96819d2e99afd06b9a9191',
-    messagingSenderId: '552098486468',
-    projectId: 'device-streaming-4a671bb5',
-    authDomain: 'device-streaming-4a671bb5.firebaseapp.com',
-    storageBucket: 'device-streaming-4a671bb5.firebasestorage.app',
+      apiKey: "AIzaSyB9uYvulSY5-UD0ogmH5maayPW4e_q75Ig",
+      authDomain: "ppnongnghiep.firebaseapp.com",
+      projectId: "ppnongnghiep",
+      storageBucket: "ppnongnghiep.firebasestorage.app",
+      messagingSenderId: "608328512668",
+      appId: "1:608328512668:web:a6f4112922d25cd04d6959",
+      measurementId: "G-6WND34B31K"
   );
 
   static const FirebaseOptions ios = FirebaseOptions(

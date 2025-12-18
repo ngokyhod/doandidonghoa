@@ -9,7 +9,10 @@ import 'firebase_options.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 import 'create_scrap_collection_request_screen.dart';
-// import 'profile_screen.dart'; // Bỏ comment nếu bạn đã tạo file này
+
+// QUAN TRỌNG: Import file chứa giao diện chính bạn vừa làm
+import 'home_screen.dart';
+// import 'product_detail_screen.dart'; // (Tạo file này sau để xem chi tiết sp)
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,33 +22,50 @@ void main() async {
   runApp(const ProviderScope(child: MyApp()));
 }
 
-// --- CẤU HÌNH ROUTER (ĐÃ SỬA LỖI) ---
+// --- CẤU HÌNH ROUTER ---
 final _router = GoRouter(
   initialLocation: '/',
-  // QUAN TRỌNG: Dòng này giúp app tự chuyển trang khi Login/Logout
   refreshListenable: GoRouterRefreshStream(FirebaseAuth.instance.authStateChanges()),
 
   redirect: (BuildContext context, GoRouterState state) {
     final loggedIn = FirebaseAuth.instance.currentUser != null;
     final isLoggingIn = state.matchedLocation == '/login' || state.matchedLocation == '/register';
 
-    // Chưa đăng nhập mà không ở trang login/register -> Đá về login
+    // Chưa đăng nhập -> Đá về login
     if (!loggedIn && !isLoggingIn) return '/login';
 
-    // Đã đăng nhập mà vẫn ở trang login/register -> Đá về trang chủ
+    // Đã đăng nhập -> Đá về trang chủ
     if (loggedIn && isLoggingIn) return '/';
 
     return null;
   },
   routes: [
-    GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+    // Trang chủ: Code sẽ lấy từ file home_screen.dart
+    GoRoute(
+        path: '/',
+        builder: (context, state) => const HomeScreen()
+    ),
+
     GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
     GoRoute(path: '/register', builder: (context, state) => const RegisterScreen()),
     GoRoute(
         path: '/create_scrap_collection_request',
         builder: (context, state) => const CreateScrapCollectionRequestScreen()
     ),
-    // GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
+
+    // BỔ SUNG: Vì trong HomeScreen cũ bạn có code bấm vào sản phẩm
+    // context.push('/product/${product.id}') nên cần định nghĩa route này để không bị lỗi
+    GoRoute(
+      path: '/product/:id',
+      builder: (context, state) {
+        // Tạm thời hiển thị màn hình trắng text, sau này bạn tạo ProductDetailScreen sau
+        final productId = state.pathParameters['id'];
+        return Scaffold(
+          appBar: AppBar(title: Text("Sản phẩm $productId")),
+          body: const Center(child: Text("Chi tiết sản phẩm đang phát triển")),
+        );
+      },
+    ),
   ],
 );
 
@@ -77,35 +97,4 @@ class GoRouterRefreshStream extends ChangeNotifier {
   }
 }
 
-// Màn hình trang chủ tạm thời
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Trang chủ"),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => FirebaseAuth.instance.signOut(),
-          )
-        ],
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text("Xin chào: ${user?.email ?? 'Người dùng'}"),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => context.push('/create_scrap_collection_request'),
-              child: const Text("Tạo yêu cầu thu gom"),
-            )
-          ],
-        ),
-      ),
-    );
-  }
-}
+// --- ĐÃ XÓA CLASS HomeScreen Ở ĐÂY ĐỂ DÙNG TỪ FILE home_screen.dart ---
