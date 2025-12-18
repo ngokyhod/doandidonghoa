@@ -1,14 +1,18 @@
+import 'dart:async'; // Cần import để dùng StreamSubscription
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
-// Import file cấu hình Firebase (Bắt buộc phải có file này trong lib/)
+import 'profile_screen.dart';
+// Import file cấu hình Firebase
 import 'firebase_options.dart';
 
-// Import màn hình Thu Gom bạn đã code
+// --- IMPORT CÁC MÀN HÌNH CỦA BẠN ---
 import 'create_scrap_collection_request_screen.dart';
+import 'login_screen.dart';   // Import màn hình đăng nhập thật
+import 'register_screen.dart'; // Import màn hình đăng ký thật
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,26 +28,45 @@ void main() async {
 // --- CẤU HÌNH ĐIỀU HƯỚNG (ROUTER) ---
 final _router = GoRouter(
   initialLocation: '/',
+  // QUAN TRỌNG: Lắng nghe thay đổi trạng thái Auth để tự động redirect
+  refreshListenable: GoRouterRefreshStream(FirebaseAuth.instance.authStateChanges()),
+
   redirect: (BuildContext context, GoRouterState state) {
     final loggedIn = FirebaseAuth.instance.currentUser != null;
     final isAuthPage = state.matchedLocation == '/login' || state.matchedLocation == '/register';
 
+    // Nếu chưa đăng nhập và không ở trang login/register -> Đá về login
     if (!loggedIn && !isAuthPage) return '/login';
+
+    // Nếu đã đăng nhập mà vẫn ở trang login/register -> Đá về trang chủ
     if (loggedIn && isAuthPage) return '/';
-    return null;
+
+    return null; // Không làm gì cả (cho phép đi tiếp)
   },
   routes: [
     // 1. Trang chủ
-    GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+    GoRoute(
+      path: '/',
+      builder: (context, state) => const HomeScreen(),
+    ),
 
     // 2. Đăng nhập & Đăng ký
-    GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
-    GoRoute(path: '/register', builder: (context, state) => const RegisterScreen()),
-
+    GoRoute(
+      path: '/login',
+      builder: (context, state) => const LoginScreen(),
+    ),
+    GoRoute(
+      path: '/register',
+      builder: (context, state) => const RegisterScreen(),
+    ),
+    GoRoute(
+      path: '/profile',
+      builder: (context, state) => const ProfileScreen(),
+    ),
     // 3. Chức năng Thu Gom (Bán phụ phẩm)
     GoRoute(
-        path: '/create_scrap_collection_request',
-        builder: (context, state) => const CreateScrapCollectionRequestScreen()
+      path: '/create_scrap_collection_request',
+      builder: (context, state) => const CreateScrapCollectionRequestScreen(),
     ),
   ],
 );
@@ -66,19 +89,45 @@ class MyApp extends ConsumerWidget {
   }
 }
 
-// --- GIAO DIỆN CÁC MÀN HÌNH CƠ BẢN (Để không bị lỗi Import) ---
+// --- CLASS HỖ TRỢ LẮNG NGHE AUTH (Để Router tự refresh) ---
+class GoRouterRefreshStream extends ChangeNotifier {
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    notifyListeners();
+    _subscription = stream.asBroadcastStream().listen(
+          (dynamic _) => notifyListeners(),
+    );
+  }
+
+  late final StreamSubscription<dynamic> _subscription;
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}
+
+// --- GIAO DIỆN TRANG CHỦ (HOME) ---
+// (LoginScreen và RegisterScreen đã bị xóa ở đây để dùng file import)
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
+    // Lấy user hiện tại để hiển thị tên (nếu có)
+    final user = FirebaseAuth.instance.currentUser;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("AgriMarket"),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () => FirebaseAuth.instance.signOut(),
+            onPressed: () {
+              // Đăng xuất -> Router sẽ tự phát hiện và đưa về Login
+              FirebaseAuth.instance.signOut();
+            },
           )
         ],
       ),
@@ -86,54 +135,27 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text("Chào mừng bạn đến với AgriMarket", style: TextStyle(fontSize: 18)),
-            const SizedBox(height: 20),
+            Text(
+                "Xin chào, ${user?.email ?? 'Người dùng'}!",
+                style: const TextStyle(fontSize: 18)
+            ),
+            const SizedBox(height: 10),
+            const Text("Chào mừng bạn đến với AgriMarket", style: TextStyle(fontSize: 16, color: Colors.grey)),
+            const SizedBox(height: 30),
+
             ElevatedButton.icon(
               icon: const Icon(Icons.add_shopping_cart),
               label: const Text("TẠO YÊU CẦU THU GOM"),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
               onPressed: () => context.push('/create_scrap_collection_request'),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class LoginScreen extends StatelessWidget {
-  const LoginScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text("ĐĂNG NHẬP", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => FirebaseAuth.instance.signInAnonymously(),
-              child: const Text("Đăng nhập ẩn danh (Để Test)"),
-            ),
-            TextButton(
-              onPressed: () => context.push('/register'),
-              child: const Text("Chưa có tài khoản? Đăng ký ngay"),
-            )
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class RegisterScreen extends StatelessWidget {
-  const RegisterScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Đăng ký")),
-      body: const Center(child: Text("Giao diện Đăng ký ở đây")),
     );
   }
 }
