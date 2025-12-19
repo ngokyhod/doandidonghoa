@@ -11,7 +11,7 @@ class AppShell extends StatelessWidget {
       if (location == '/') return 0;
       if (location.startsWith('/create_scrap_collection_request')) return 1;
       if (location.startsWith('/admin_chat')) return 2;
-      if (location.startsWith('/chatbot')) return 3;
+      if (location.startsWith('/product_list')) return 3;
       if (location.startsWith('/profile')) return 4;
     }
     return 0;
@@ -29,7 +29,7 @@ class AppShell extends StatelessWidget {
         context.go('/admin_chat');
         break;
       case 3:
-        context.go('/chatbot');
+        context.go('/product_list_screen');
         break;
       case 4:
         context.go('/profile');
@@ -59,12 +59,12 @@ class AppShell extends StatelessWidget {
           BottomNavigationBarItem(
             icon: Icon(Icons.chat_bubble_outline),
             activeIcon: Icon(Icons.chat_bubble),
-            label: 'Chat',
+            label: 'Nhận diện',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.psychology_outlined),
             activeIcon: Icon(Icons.psychology),
-            label: 'Chatbot',
+            label: 'Sản phẩm',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),

@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -7,19 +6,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'firebase_options.dart';
-import 'theme_notifier.dart'; // Import file theme của bạn
+import 'theme_notifier.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 import 'create_scrap_collection_request_screen.dart';
 import 'app_shell.dart';
-// QUAN TRỌNG: Import file chứa giao diện chính bạn vừa làm
-import 'home_screen.dart';
 import 'cart_screen.dart';
-// import 'product_detail_screen.dart'; // (Tạo file này sau để xem chi tiết sp)
 import 'chatbot_screen.dart';
-// --- KHAI BÁO KEY NAVIGATION (Sửa lỗi _shellNavigatorKey) ---
 import 'profile_screen.dart';
+import 'product_list_screen.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
@@ -27,62 +24,74 @@ void main() async {
   );
   runApp(const ProviderScope(child: MyApp()));
 }
+
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
-final _shellNavigatorKey = GlobalKey<NavigatorState>(); // <-- Đây là biến bạn bị thiếu
-// --- CẤU HÌNH ROUTER ---
+final _shellNavigatorKey = GlobalKey<NavigatorState>();
+
 final _router = GoRouter(
+  navigatorKey: _rootNavigatorKey,
   initialLocation: '/',
   refreshListenable: GoRouterRefreshStream(FirebaseAuth.instance.authStateChanges()),
 
   redirect: (BuildContext context, GoRouterState state) {
-    final loggedIn = FirebaseAuth.instance.currentUser != null;
-    final isLoggingIn = state.matchedLocation == '/login' || state.matchedLocation == '/register';
+    final user = FirebaseAuth.instance.currentUser;
+    final loggedIn = user != null;
 
-    // Chưa đăng nhập -> Đá về login
-    if (!loggedIn && !isLoggingIn) return '/login';
+    // Danh sách các trang KHÔNG cần đăng nhập vẫn xem được
+    final publicRoutes = ['/', '/login', '/register'];
+    final isPublicRoute = publicRoutes.contains(state.matchedLocation) ||
+        state.matchedLocation.startsWith('/product/');
 
-    // Đã đăng nhập -> Đá về trang chủ
-    if (loggedIn && isLoggingIn) return '/';
+    // 1. Nếu chưa đăng nhập và cố vào trang bảo mật (không phải public) -> Đá về login
+    if (!loggedIn && !isPublicRoute) return '/login';
 
-    return null;
+    // 2. Nếu đã đăng nhập mà lại vào trang login/register -> Đá về trang chủ
+    if (loggedIn && (state.matchedLocation == '/login' || state.matchedLocation == '/register')) {
+      return '/';
+    }
+
+    return null; // Cho phép đi tiếp
   },
   routes: [
-    // Trang chủ: Code sẽ lấy từ file home_screen.dart
-    GoRoute(
-        path: '/',
-        builder: (context, state) => const HomeScreen()
-    ),
-
     GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
     GoRoute(path: '/register', builder: (context, state) => const RegisterScreen()),
-    GoRoute(
-        path: '/create_scrap_collection_request',
-        builder: (context, state) => const CreateScrapCollectionRequestScreen()
-    ),
+
+    // --- SHELL ROUTE (Thanh điều hướng dưới đáy) ---
     ShellRoute(
-        navigatorKey: _shellNavigatorKey,
-        builder: (context, state, child) => AppShell(child: child),
-        routes: [
-          GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
-          GoRoute(path: '/create_scrap_collection_request', builder: (context, state) => const CreateScrapCollectionRequestScreen()),
-          GoRoute(path: '/cart', builder: (context, state) => const CartScreen()),
-          GoRoute(path: '/chatbot', builder: (context, state) => const ChatbotScreen()),
-          GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
-        ]
+      navigatorKey: _shellNavigatorKey,
+      builder: (context, state, child) => AppShell(child: child),
+      routes: [
+        // Trang chủ nằm trong Shell để hiện thanh menu dưới
+        GoRoute(
+            path: '/',
+            builder: (context, state) => const HomeScreen()
+        ),
+        GoRoute(path: '/create_scrap_collection_request', builder: (context, state) => const CreateScrapCollectionRequestScreen()),
+        GoRoute(path: '/cart', builder: (context, state) => const CartScreen()),
+        GoRoute(
+          path: '/products',
+          builder: (context, state) => const ProductListScreen(),
+        ),
+        GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
+        GoRoute(
+          path: '/products',
+          builder: (context, state) => const ProductListScreen(),
+        ),
+      ],
     ),
-    // BỔ SUNG: Vì trong HomeScreen cũ bạn có code bấm vào sản phẩm
-    // context.push('/product/${product.id}') nên cần định nghĩa route này để không bị lỗi
+
+    // Chi tiết sản phẩm (Full màn hình, che menu dưới)
     GoRoute(
       path: '/product/:id',
+      parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) {
-        // Tạm thời hiển thị màn hình trắng text, sau này bạn tạo ProductDetailScreen sau
         final productId = state.pathParameters['id'];
+        // TODO: Thay bằng ProductDetailScreen thật của bạn
         return Scaffold(
           appBar: AppBar(title: Text("Sản phẩm $productId")),
-          body: const Center(child: Text("Chi tiết sản phẩm đang phát triển")),
+          body: const Center(child: Text("Chi tiết sản phẩm")),
         );
       },
-
     ),
   ],
 );
@@ -92,6 +101,7 @@ class MyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Nếu bạn có dùng ThemeNotifier thì watch ở đây, tạm thời mình để mặc định
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'AgriMarket',
@@ -101,7 +111,6 @@ class MyApp extends ConsumerWidget {
   }
 }
 
-// Class tiện ích giúp GoRouter lắng nghe Firebase Auth
 class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
     notifyListeners();
@@ -114,5 +123,3 @@ class GoRouterRefreshStream extends ChangeNotifier {
     super.dispose();
   }
 }
-
-// --- ĐÃ XÓA CLASS HomeScreen Ở ĐÂY ĐỂ DÙNG TỪ FILE home_screen.dart ---
