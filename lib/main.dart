@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -6,14 +7,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'firebase_options.dart';
+import 'theme_notifier.dart'; // Import file theme của bạn
+import 'home_screen.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 import 'create_scrap_collection_request_screen.dart';
-
+import 'app_shell.dart';
 // QUAN TRỌNG: Import file chứa giao diện chính bạn vừa làm
 import 'home_screen.dart';
+import 'cart_screen.dart';
 // import 'product_detail_screen.dart'; // (Tạo file này sau để xem chi tiết sp)
-
+import 'chatbot_screen.dart';
+// --- KHAI BÁO KEY NAVIGATION (Sửa lỗi _shellNavigatorKey) ---
+import 'profile_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
@@ -21,7 +27,8 @@ void main() async {
   );
   runApp(const ProviderScope(child: MyApp()));
 }
-
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
+final _shellNavigatorKey = GlobalKey<NavigatorState>(); // <-- Đây là biến bạn bị thiếu
 // --- CẤU HÌNH ROUTER ---
 final _router = GoRouter(
   initialLocation: '/',
@@ -52,7 +59,17 @@ final _router = GoRouter(
         path: '/create_scrap_collection_request',
         builder: (context, state) => const CreateScrapCollectionRequestScreen()
     ),
-
+    ShellRoute(
+        navigatorKey: _shellNavigatorKey,
+        builder: (context, state, child) => AppShell(child: child),
+        routes: [
+          GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+          GoRoute(path: '/create_scrap_collection_request', builder: (context, state) => const CreateScrapCollectionRequestScreen()),
+          GoRoute(path: '/cart', builder: (context, state) => const CartScreen()),
+          GoRoute(path: '/chatbot', builder: (context, state) => const ChatbotScreen()),
+          GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
+        ]
+    ),
     // BỔ SUNG: Vì trong HomeScreen cũ bạn có code bấm vào sản phẩm
     // context.push('/product/${product.id}') nên cần định nghĩa route này để không bị lỗi
     GoRoute(
@@ -65,6 +82,7 @@ final _router = GoRouter(
           body: const Center(child: Text("Chi tiết sản phẩm đang phát triển")),
         );
       },
+
     ),
   ],
 );
