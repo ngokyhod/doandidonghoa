@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-
+import 'package:cached_network_image/cached_network_image.dart';
 // --- QUAN TRỌNG: Import chuẩn file model và service ---
 // Đảm bảo tên file trong thư mục lib của bạn là 'product_model.dart' và 'product_service.dart'
 import '../model/product_model.dart';
 import '../service/Product_Service.dart';
 
 class ProductListScreen extends StatefulWidget {
-  const ProductListScreen({super.key});
+  final String? initialSearchQuery;
+  const ProductListScreen({super.key, this.initialSearchQuery});
 
   @override
   State<ProductListScreen> createState() => _ProductListScreenState();
@@ -34,7 +35,10 @@ class _ProductListScreenState extends State<ProductListScreen> {
   @override
   void initState() {
     super.initState();
-    // Lắng nghe thay đổi text trong ô tìm kiếm
+    if (widget.initialSearchQuery != null) {
+      _searchController.text = widget.initialSearchQuery!;
+      _searchQuery = widget.initialSearchQuery!;
+    }
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text;
@@ -249,20 +253,21 @@ class _ProductListScreenState extends State<ProductListScreen> {
               child: ClipRRect(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
                 child: product.imageUrls.isNotEmpty
-                    ? Image.network(
-                  product.imageUrls.first,
-                  width: double.infinity,
+                    ? CachedNetworkImage(
+                  imageUrl: product.imageUrls.first,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: Colors.grey[200],
-                      child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
-                    );
-                  },
+                  width: double.infinity,
+                  // Hiện vòng xoay khi đang tải
+                  placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+                  // Hiện icon lỗi nếu ảnh hỏng
+                  errorWidget: (context, url, error) => Container(
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.broken_image, color: Colors.grey),
+                  ),
                 )
                     : Container(
                   color: Colors.green.withOpacity(0.1),
-                  child: const Center(child: Icon(Icons.spa, size: 40, color: Colors.green)),
+                  child: const Center(child: Icon(Icons.grass, color: Colors.green)),
                 ),
               ),
             ),

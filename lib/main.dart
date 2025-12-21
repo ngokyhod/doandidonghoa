@@ -57,7 +57,16 @@ final _router = GoRouter(
         GoRoute(path: '/create_scrap_collection_request', builder: (context, state) => const CreateScrapCollectionRequestScreen()),
 
         // 4. Sản phẩm (Nút Bên Phải) -> Đã nối vào ProductListScreen
-        GoRoute(path: '/products', builder: (context, state) => const ProductListScreen()),
+        GoRoute(
+          path: '/products',
+          builder: (context, state) {
+            // Lấy tham số 'search' từ URL (nếu có)
+            final searchQuery = state.uri.queryParameters['search'];
+
+            // Truyền vào màn hình
+            return ProductListScreen(initialSearchQuery: searchQuery);
+          },
+        ),
 
         // 5. Cá nhân
         GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
@@ -74,6 +83,7 @@ final _router = GoRouter(
         return ProductDetailScreen(productId: productId, extraProduct: product);
       },
     ),
+
   ],
 );
 

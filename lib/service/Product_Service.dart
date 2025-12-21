@@ -14,55 +14,66 @@ class ProductService {
       return 'http://10.0.2.2:5056/api/MobileApi';
     }
   }
-
+  static String get baseImageUrl {
+    if (kIsWeb) return 'https://localhost:7240';
+    return 'http://10.0.2.2:5136';
+  }
   // Hàm lấy danh sách sản phẩm
   static Future<List<Product>> fetchProducts({String? query, String? category}) async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/products'));
 
       if (response.statusCode == 200) {
-        final List<dynamic> jsonList = json.decode(response.body);
+        final List<dynamic> data = json.decode(response.body);
 
-        List<Product> products = jsonList.map((jsonItem) {
-          // Xử lý đường dẫn ảnh
+        // 1. Map dữ liệu từ JSON sang List<Product>
+        List<Product> allProducts = data.map((jsonItem) {
           String rawImg = jsonItem['anhSanPham'] ?? '';
-          // Nếu ảnh chưa có http đầu thì nối domain vào
-          String domain = baseUrl.replaceAll('/api/MobileApi', '');
-          String fullImgUrl = rawImg.startsWith('https') ? rawImg : '$domain/images/$rawImg';
+          String fullImgUrl = '';
+          if (rawImg.isNotEmpty) {
+            fullImgUrl = rawImg.startsWith('http') ? rawImg : '$baseImageUrl/$rawImg';
+          }
 
           return Product(
-            id: jsonItem['m_SanPham']?.toString() ?? '',
-            title: jsonItem['tenSanPham'] ?? 'Không tên',
+            id: jsonItem['m_SanPham'] ?? '',
+            title: jsonItem['tenSanPham'] ?? '',
             price: (jsonItem['gia'] ?? 0).toDouble(),
-            imageUrls: rawImg.isNotEmpty ? [fullImgUrl] : [],
-            category: jsonItem['tenLoai'] ?? 'Khác',
-            unit: jsonItem['tenDVT'] ?? '',
+            imageUrls: fullImgUrl.isNotEmpty ? [fullImgUrl] : [],
+            // Đảm bảo lấy đúng tên loại từ API để lọc
+            category: jsonItem['tenLoai'] ?? '',
+            unit: jsonItem['tenDVT'] ?? 'kg',
             description: jsonItem['moTa'] ?? '',
-            sellerName: 'Cửa hàng',
             stockQuantity: 0,
           );
         }).toList();
 
-        // Lọc dữ liệu bên Client (nếu API chưa hỗ trợ lọc)
-        if (category != null && category != 'Tất cả') {
-          products = products.where((p) => p.category == category).toList();
-        }
-        if (query != null && query.isNotEmpty) {
-          products = products.where((p) =>
-              p.title.toLowerCase().contains(query.toLowerCase())
-          ).toList();
-        }
+        // 2. THỰC HIỆN LỌC (FILTERING) TẠI ĐÂY
+        return allProducts.where((product) {
+          // A. Lọc theo từ khóa tìm kiếm (Search)
+          bool matchQuery = true;
+          if (query != null && query.isNotEmpty) {
+            matchQuery = product.title.toLowerCase().contains(query.toLowerCase());
+          }
 
-        return products;
+          // B. Lọc theo danh mục (Category)
+          bool matchCategory = true;
+          if (category != null && category != 'Tất cả') {
+            // So sánh tên loại sản phẩm (Ví dụ: "Phân bón" == "Phân bón")
+            // Dùng toLowerCase() để so sánh không phân biệt hoa thường cho chắc chắn
+            matchCategory = product.category.toLowerCase() == category.toLowerCase();
+          }
+
+          return matchQuery && matchCategory;
+        }).toList();
+
       } else {
-        print('Lỗi Server: ${response.statusCode}');
+        print('Lỗi server: ${response.statusCode}');
         return [];
       }
     } catch (e) {
-      print('Lỗi gọi API: $e');
+      print('Lỗi kết nối fetchProducts: $e');
       return [];
     }
-
   }
   // Hàm lấy chi tiết sản phẩm
   static Future<Product?> fetchProductDetail(String id) async {

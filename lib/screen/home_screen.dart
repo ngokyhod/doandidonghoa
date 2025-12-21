@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+import 'package:cached_network_image/cached_network_image.dart';
 import '../model/product_model.dart';
 import '../service/Product_Service.dart';
 
@@ -15,19 +15,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _searchController = TextEditingController();
-
   // Controller cho Banner
   final PageController _bannerController = PageController();
   int _currentBannerIndex = 0;
   Timer? _bannerTimer;
-
-  // Controller cho Tin tức
   final PageController _newsController = PageController(viewportFraction: 0.35);
 
-  // Dữ liệu API sản phẩm
   late Future<List<Product>> _featuredProductsFuture;
 
+  // --- MỚI: Danh sách tên sản phẩm để gợi ý ---
+  List<String> _productSuggestions = [];
   final List<String> _bannerImageUrls = [
     'assets/images/Banner/banner1.png',
     'assets/images/Banner/banner2.png',
@@ -39,8 +36,15 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _startBannerAutoPlay();
     _featuredProductsFuture = ProductService.fetchProducts();
+    _loadSuggestions();
   }
-
+  void _loadSuggestions() async {
+    // Lấy tất cả sản phẩm về chỉ để lấy tên
+    var products = await ProductService.fetchProducts();
+    setState(() {
+      _productSuggestions = products.map((e) => e.title).toSet().toList(); // toSet để loại bỏ tên trùng
+    });
+  }
   void _startBannerAutoPlay() {
     _bannerTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (_bannerController.hasClients) {
@@ -56,7 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _searchController.dispose();
+
     _bannerController.dispose();
     _newsController.dispose();
     _bannerTimer?.cancel();
@@ -129,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
       color: Colors.white,
       child: Row(
         children: [
-          // Thanh tìm kiếm
+          // 1. THANH TÌM KIẾM CÓ GỢI Ý (Giữ nguyên code Autocomplete của bạn)
           Expanded(
             child: Container(
               height: 45,
@@ -137,23 +141,83 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: Colors.grey[100],
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: TextField(
-                controller: _searchController,
-                decoration: const InputDecoration(
-                  hintText: 'Tìm kiếm...',
-                  prefixIcon: Icon(Icons.search, color: Colors.grey),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 10),
-                ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return Autocomplete<String>(
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      if (textEditingValue.text.isEmpty) {
+                        return const Iterable<String>.empty();
+                      }
+                      return _productSuggestions.where((String option) {
+                        return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                      });
+                    },
+                    onSelected: (String selection) {
+                      context.go('/products?search=${Uri.encodeComponent(selection)}');
+                    },
+                    fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                      return TextField(
+                        controller: textEditingController,
+                        focusNode: focusNode,
+                        onSubmitted: (value) {
+                          if (value.isNotEmpty) {
+                            context.go('/products?search=${Uri.encodeComponent(value)}');
+                          }
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'Tìm kiếm...',
+                          prefixIcon: GestureDetector(
+                            onTap: () {
+                              if (textEditingController.text.isNotEmpty) {
+                                context.go('/products?search=${Uri.encodeComponent(textEditingController.text)}');
+                              }
+                            },
+                            child: const Icon(Icons.search, color: Colors.grey),
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                      );
+                    },
+                    optionsViewBuilder: (context, onSelected, options) {
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4.0,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            width: constraints.maxWidth,
+                            color: Colors.white,
+                            constraints: const BoxConstraints(maxHeight: 200),
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              itemCount: options.length,
+                              shrinkWrap: true,
+                              itemBuilder: (BuildContext context, int index) {
+                                final String option = options.elementAt(index);
+                                return ListTile(
+                                  title: Text(option, style: const TextStyle(fontSize: 14)),
+                                  onTap: () => onSelected(option),
+                                  dense: true,
+                                  leading: const Icon(Icons.search, size: 18, color: Colors.grey),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
             ),
           ),
 
           const SizedBox(width: 12),
 
-          // --- USER ICON: THAY ĐỔI THEO TRẠNG THÁI ---
+          // --- 2. PHẦN MỚI THÊM LẠI: USER ICON (StreamBuilder) ---
           StreamBuilder<User?>(
-            stream: FirebaseAuth.instance.authStateChanges(),
+            stream: FirebaseAuth.instance.authStateChanges(), // Lắng nghe trạng thái đăng nhập
             builder: (context, snapshot) {
               final user = snapshot.data;
               final isLoggedIn = user != null;
@@ -171,9 +235,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   height: 40,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    // Nền: Chưa đăng nhập thì trắng/xám nhạt, Đăng nhập rồi thì xanh nhạt
+                    // Nền: Chưa đăng nhập thì trong suốt, Đăng nhập rồi thì xanh nhạt
                     color: isLoggedIn ? Colors.green.withOpacity(0.1) : Colors.transparent,
-                    // Viền: Chưa đăng nhập -> Xám nhạt (nhìn như khung trắng), Đăng nhập -> Xanh
+                    // Viền: Chưa đăng nhập -> Xám nhạt, Đăng nhập -> Xanh
                     border: Border.all(
                         color: isLoggedIn ? Colors.green : Colors.grey.shade400,
                         width: 1.5
@@ -188,11 +252,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: (isLoggedIn && user.photoURL != null)
                       ? null
                       : Icon(
-                    // SỬA: Dùng account_circle (hình người mặc định) thay vì login (cái cửa)
                     isLoggedIn ? Icons.person : Icons.account_circle_outlined,
-                    // Màu: Chưa đăng nhập thì xám, đăng nhập thì xanh
                     color: isLoggedIn ? Colors.green : Colors.grey,
-                    size: isLoggedIn ? 24 : 28, // Icon chưa đăng nhập cho to rõ hơn chút
+                    size: isLoggedIn ? 24 : 28,
                   ),
                 ),
               );

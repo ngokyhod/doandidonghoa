@@ -1,70 +1,143 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'screen/chatbot_screen.dart'; // Import màn hình chat
 
-class AppShell extends StatelessWidget {
+class AppShell extends StatefulWidget {
   final Widget child;
   const AppShell({super.key, required this.child});
 
   @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  // Hàm tính toán index dựa trên đường dẫn hiện tại
+  int _calculateSelectedIndex(BuildContext context) {
+    // Lấy đường dẫn hiện tại (ví dụ: '/products?search=abc' hoặc '/')
+    final String location = GoRouterState.of(context).uri.path;
+
+    // Logic so sánh:
+    // 1. Trang chủ ('/') -> Index 0
+    if (location == '/') return 0;
+
+    // 2. Sản phẩm ('/products') -> Index 1
+    if (location.startsWith('/products')) return 1;
+
+    // 3. Thu gom ('/create_scrap_collection_request') -> Index 2 (Nút giữa)
+    if (location.startsWith('/create_scrap_collection_request')) return 2;
+
+    // 4. CSKH ('/admin_chat') -> Index 3
+    if (location.startsWith('/admin_chat')) return 3;
+
+    // 5. Cá nhân ('/profile') -> Index 4
+    if (location.startsWith('/profile')) return 4;
+
+    return 0; // Mặc định về trang chủ nếu không khớp
+  }
+
+  // Hàm xử lý khi bấm vào tab
+  void _onItemTapped(int index, BuildContext context) {
+    switch (index) {
+      case 0:
+        context.go('/'); // Về trang chủ
+        break;
+      case 1:
+        context.go('/products'); // Sang danh sách sản phẩm
+        break;
+      case 2:
+        context.go('/create_scrap_collection_request'); // Sang thu gom
+        break;
+      case 3:
+        context.go('/admin_chat'); // Sang CSKH
+        break;
+      case 4:
+        context.go('/profile'); // Sang profile
+        break;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Lấy đường dẫn hiện tại để xác định tab đang chọn
-    final String location = GoRouterState.of(context).uri.toString();
-
-    int currentIndex = 0;
-    // Logic ánh xạ đường dẫn -> Index của thanh menu
-    if (location == '/') currentIndex = 0;
-    else if (location.startsWith('/create_scrap_collection_request')) currentIndex = 1;
-    else if (location.startsWith('/create_scrap_collection_request')) currentIndex = 2; // Giữa
-    else if (location.startsWith('/products')) currentIndex = 3; // Bên phải nút giữa
-    else if (location.startsWith('/profile')) currentIndex = 4;
-
     return Scaffold(
-      body: child,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: currentIndex,
-        onDestinationSelected: (index) {
-          // Logic chuyển trang khi bấm vào icon
-          switch (index) {
-            case 0: context.go('/'); break;
-            case 1: context.go('/create_scrap_collection_request'); break;
-            case 2: context.go('/create_scrap_collection_request'); break; // Quét/Thu gom
-            case 3: context.go('/products'); break; // Chuyển sang trang Sản phẩm
-            case 4: context.go('/profile'); break;
-          }
-        },
-        destinations: const [
-          // 0. Trang chủ
-          NavigationDestination(
+      // Body dùng Stack để vẽ nút Chat đè lên trên nội dung chính
+      body: Stack(
+        children: [
+          // 1. Nội dung chính (Child từ ShellRoute)
+          widget.child,
+
+          // 2. Nút Chat bong bóng (Góc trên bên phải)
+          Positioned(
+            bottom: MediaQuery.of(context).padding.top + 10,
+            right: 16,
+            child: FloatingActionButton(
+              heroTag: 'chatbot_bubble',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const ChatbotScreen()),
+                );
+              },
+              backgroundColor: const Color(0xFF0B84FF),
+              elevation: 10,
+              shape: const CircleBorder(),
+              child: const Icon(Icons.support_agent, color: Colors.white, size: 28),
+            ),
+          ),
+        ],
+      ),
+
+      // Bottom Navigation Bar
+      bottomNavigationBar: BottomNavigationBar(
+        // Lấy index hiện tại để highlight icon
+        currentIndex: _calculateSelectedIndex(context),
+
+        // Gọi hàm chuyển trang khi bấm
+        onTap: (idx) => _onItemTapped(idx, context),
+
+        type: BottomNavigationBarType.fixed, // Giữ cố định vị trí các nút
+
+        // Màu sắc khi được chọn (Active)
+        selectedItemColor: Colors.green,
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
+
+        // Màu sắc khi không chọn (Inactive)
+        unselectedItemColor: Colors.grey,
+
+        showUnselectedLabels: true, // Luôn hiện chữ bên dưới
+
+        items: const [
+          // Index 0
+          BottomNavigationBarItem(
               icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home),
+              activeIcon: Icon(Icons.home), // Icon đậm hơn khi active
               label: 'Trang chủ'
           ),
 
-          // 1. Chatbot (Thay thế hình chat cũ ở giữa bằng cái này ở bên trái)
-          NavigationDestination(
-            icon: Icon(Icons.recycling_outlined),
-            selectedIcon: Icon(Icons.recycling),
-            label: 'Thu gom',
-          ),
-
-          // 2. NÚT GIỮA: Quét phụ phẩm (Sửa lại icon thành QR Code hoặc Camera)
-          NavigationDestination(
-              icon: Icon(Icons.qr_code_scanner, size: 32, color: Colors.green),
-              label: 'Quét QR'
-          ),
-
-          // 3. NÚT BÊN PHẢI: Sản phẩm (Sửa lại icon thành Giỏ hàng/Cửa hàng)
-          NavigationDestination(
-              icon: Icon(Icons.storefront_outlined),
-              selectedIcon: Icon(Icons.storefront),
+          // Index 1
+          BottomNavigationBarItem(
+              icon: Icon(Icons.spa_outlined),
+              activeIcon: Icon(Icons.spa),
               label: 'Sản phẩm'
           ),
 
-          // 4. Cá nhân
-          NavigationDestination(
+          // Index 2 (Thu gom)
+          BottomNavigationBarItem(
+              icon: Icon(Icons.recycling_outlined),
+              activeIcon: Icon(Icons.recycling),
+              label: 'Thu gom'
+          ),
+
+          // Index 3
+          BottomNavigationBarItem(
+              icon: Icon(Icons.chat_bubble_outline),
+              activeIcon: Icon(Icons.chat_bubble),
+              label: 'CSKH'
+          ),
+
+          // Index 4
+          BottomNavigationBarItem(
               icon: Icon(Icons.person_outline),
-              selectedIcon: Icon(Icons.person),
-              label: 'Cá nhân'
+              activeIcon: Icon(Icons.person),
+              label: 'Tôi'
           ),
         ],
       ),
