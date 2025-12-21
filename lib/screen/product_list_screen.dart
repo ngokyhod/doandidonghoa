@@ -4,8 +4,8 @@ import 'package:intl/intl.dart';
 
 // --- QUAN TRỌNG: Import chuẩn file model và service ---
 // Đảm bảo tên file trong thư mục lib của bạn là 'product_model.dart' và 'product_service.dart'
-import 'product_model.dart';
-import 'Product_Service.dart';
+import '../model/product_model.dart';
+import '../service/Product_Service.dart';
 
 class ProductListScreen extends StatefulWidget {
   const ProductListScreen({super.key});
@@ -226,6 +226,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
 
   // Widget hiển thị từng ô sản phẩm
   Widget _buildProductItem(BuildContext context, Product product) {
+
     return GestureDetector(
       onTap: () => context.push('/product/${product.id}', extra: product),
       child: Container(

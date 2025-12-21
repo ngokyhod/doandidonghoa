@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'product_model.dart';
-import 'Product_Service.dart';
+import '../model/product_model.dart';
+import '../service/Product_Service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,7 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentBannerIndex = 0;
   Timer? _bannerTimer;
 
-  // Controller cho Tin tức (Carousel 3 items)
+  // Controller cho Tin tức
   final PageController _newsController = PageController(viewportFraction: 0.35);
 
   // Dữ liệu API sản phẩm
@@ -84,24 +84,30 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 1. Header (Có User Avatar mới)
               _buildHeader(context),
+
+              // 2. Tiện ích
               _buildUtilityGrid(),
               const SizedBox(height: 16),
+
+              // 3. Banner
               _buildBannerSection(),
               const SizedBox(height: 24),
 
+              // 4. Sản phẩm nổi bật
               _buildSectionTitle("Phụ phẩm nổi bật", onTap: () => context.push('/products')),
               _buildFeaturedProducts(),
 
               const SizedBox(height: 24),
 
-              // --- PHẦN 1: QUY TRÌNH GIAO DỊCH (GIAO DIỆN MỚI) ---
+              // 5. Quy trình giao dịch
               _buildSectionTitle("Quy trình giao dịch"),
               _buildTransactionProcessSection(),
 
               const SizedBox(height: 24),
 
-              // --- PHẦN 2: TIN TỨC ---
+              // 6. Tin tức
               _buildSectionTitle("Tin tức nông nghiệp"),
               _buildNewsCarouselSection(),
 
@@ -114,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // --------------------------------------------------------------------------
-  // WIDGET CON: HEADER & UTILITIES & BANNER
+  // WIDGET CON: HEADER (CÓ USER AVATAR)
   // --------------------------------------------------------------------------
 
   Widget _buildHeader(BuildContext context) {
@@ -123,6 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
       color: Colors.white,
       child: Row(
         children: [
+          // Thanh tìm kiếm
           Expanded(
             child: Container(
               height: 45,
@@ -133,7 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: TextField(
                 controller: _searchController,
                 decoration: const InputDecoration(
-                  hintText: 'Tìm kiếm nông sản...',
+                  hintText: 'Tìm kiếm...',
                   prefixIcon: Icon(Icons.search, color: Colors.grey),
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(vertical: 10),
@@ -141,11 +148,65 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
+
           const SizedBox(width: 12),
+
+          // --- USER ICON: THAY ĐỔI THEO TRẠNG THÁI ---
+          StreamBuilder<User?>(
+            stream: FirebaseAuth.instance.authStateChanges(),
+            builder: (context, snapshot) {
+              final user = snapshot.data;
+              final isLoggedIn = user != null;
+
+              return GestureDetector(
+                onTap: () {
+                  if (isLoggedIn) {
+                    context.go('/profile');
+                  } else {
+                    context.push('/login');
+                  }
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    // Nền: Chưa đăng nhập thì trắng/xám nhạt, Đăng nhập rồi thì xanh nhạt
+                    color: isLoggedIn ? Colors.green.withOpacity(0.1) : Colors.transparent,
+                    // Viền: Chưa đăng nhập -> Xám nhạt (nhìn như khung trắng), Đăng nhập -> Xanh
+                    border: Border.all(
+                        color: isLoggedIn ? Colors.green : Colors.grey.shade400,
+                        width: 1.5
+                    ),
+                    image: (isLoggedIn && user.photoURL != null)
+                        ? DecorationImage(
+                      image: NetworkImage(user.photoURL!),
+                      fit: BoxFit.cover,
+                    )
+                        : null,
+                  ),
+                  child: (isLoggedIn && user.photoURL != null)
+                      ? null
+                      : Icon(
+                    // SỬA: Dùng account_circle (hình người mặc định) thay vì login (cái cửa)
+                    isLoggedIn ? Icons.person : Icons.account_circle_outlined,
+                    // Màu: Chưa đăng nhập thì xám, đăng nhập thì xanh
+                    color: isLoggedIn ? Colors.green : Colors.grey,
+                    size: isLoggedIn ? 24 : 28, // Icon chưa đăng nhập cho to rõ hơn chút
+                  ),
+                ),
+              );
+            },
+          ),
+          // ----------------------------------------------------------
+
+          const SizedBox(width: 8),
+
           IconButton(
             icon: const Icon(Icons.favorite_border, color: Colors.green, size: 28),
             onPressed: () => _checkLoginAndGo('/profile'),
           ),
+
           IconButton(
             icon: const Icon(Icons.shopping_cart_outlined, color: Colors.green, size: 28),
             onPressed: () => _checkLoginAndGo('/cart'),
@@ -154,6 +215,10 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  // --------------------------------------------------------------------------
+  // CÁC WIDGET CON KHÁC
+  // --------------------------------------------------------------------------
 
   Widget _buildUtilityGrid() {
     final List<Map<String, dynamic>> utilities = [
@@ -242,10 +307,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --------------------------------------------------------------------------
-  // WIDGET CON: QUY TRÌNH GIAO DỊCH (GIAO DIỆN STEPPER HIỆN ĐẠI)
-  // --------------------------------------------------------------------------
-
   Widget _buildTransactionProcessSection() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -260,38 +321,10 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildStepItem(
-              context,
-              Icons.shopping_cart_checkout,
-              "Đặt hàng",
-              "1",
-              detail: "Khách hàng lựa chọn nông sản, thêm vào giỏ hàng và nhập thông tin địa chỉ nhận hàng.",
-              isLast: false
-          ),
-          _buildStepItem(
-              context,
-              Icons.verified_user_outlined,
-              "Xác nhận",
-              "2",
-              detail: "Người bán hoặc hệ thống xác nhận đơn hàng. Kiểm tra số lượng tồn kho và chốt đơn.",
-              isLast: false
-          ),
-          _buildStepItem(
-              context,
-              Icons.local_shipping_outlined,
-              "Vận chuyển",
-              "3",
-              detail: "Đơn vị vận chuyển đến lấy hàng từ nông trại và giao tận tay đến địa chỉ của bạn.",
-              isLast: false
-          ),
-          _buildStepItem(
-              context,
-              Icons.star_outline,
-              "Đánh giá",
-              "4",
-              detail: "Bạn nhận hàng, kiểm tra chất lượng và đánh giá sao/bình luận cho người bán.",
-              isLast: true
-          ),
+          _buildStepItem(context, Icons.shopping_cart_checkout, "Đặt hàng", "1", detail: "Khách hàng lựa chọn nông sản, thêm vào giỏ hàng và nhập thông tin địa chỉ nhận hàng.", isLast: false),
+          _buildStepItem(context, Icons.verified_user_outlined, "Xác nhận", "2", detail: "Người bán hoặc hệ thống xác nhận đơn hàng. Kiểm tra số lượng tồn kho và chốt đơn.", isLast: false),
+          _buildStepItem(context, Icons.local_shipping_outlined, "Vận chuyển", "3", detail: "Đơn vị vận chuyển đến lấy hàng từ nông trại và giao tận tay đến địa chỉ của bạn.", isLast: false),
+          _buildStepItem(context, Icons.star_outline, "Đánh giá", "4", detail: "Bạn nhận hàng, kiểm tra chất lượng và đánh giá sao/bình luận cho người bán.", isLast: true),
         ],
       ),
     );
@@ -300,7 +333,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildStepItem(BuildContext context, IconData icon, String title, String step, {required String detail, required bool isLast}) {
     return Expanded(
       child: GestureDetector(
-        // Sự kiện khi nhấn vào bước
         onTap: () {
           showDialog(
             context: context,
@@ -329,10 +361,9 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         child: Column(
           children: [
-            // Icon với đường nối
             Row(
               children: [
-                Expanded(child: Container(height: 2, color: step == "1" ? Colors.transparent : Colors.grey.shade200)), // Đường trái
+                Expanded(child: Container(height: 2, color: step == "1" ? Colors.transparent : Colors.grey.shade200)),
                 Container(
                   width: 40, height: 40,
                   decoration: BoxDecoration(
@@ -342,15 +373,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: Icon(icon, size: 20, color: Colors.green),
                 ),
-                Expanded(child: Container(height: 2, color: isLast ? Colors.transparent : Colors.grey.shade200)), // Đường phải
+                Expanded(child: Container(height: 2, color: isLast ? Colors.transparent : Colors.grey.shade200)),
               ],
             ),
             const SizedBox(height: 8),
-
-            // Tiêu đề
             Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87), textAlign: TextAlign.center),
-
-            // Nút "Xem" nhỏ bên dưới để gợi ý bấm vào
             const SizedBox(height: 4),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -366,10 +393,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-  // --------------------------------------------------------------------------
-  // WIDGET CON: TIN TỨC (CAROUSEL)
-  // --------------------------------------------------------------------------
 
   Widget _buildNewsCarouselSection() {
     final List<Map<String, String>> news = List.generate(8, (index) => {
@@ -457,10 +480,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-  // --------------------------------------------------------------------------
-  // CÁC WIDGET KHÁC
-  // --------------------------------------------------------------------------
 
   Widget _buildSectionTitle(String title, {VoidCallback? onTap}) {
     return Padding(

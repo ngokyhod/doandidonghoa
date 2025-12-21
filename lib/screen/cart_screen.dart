@@ -2,8 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'cart_item_model.dart';
-import 'cart_service.dart';
+import '../model/cart_item_model.dart';
+import '../service/cart_service.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});

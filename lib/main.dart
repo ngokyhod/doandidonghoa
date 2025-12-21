@@ -1,21 +1,25 @@
-import 'dart:async';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:doandidonghoa/model/product_model.dart';
+import 'package:doandidonghoa/screen/product_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'firebase_options.dart';
-import 'theme_notifier.dart';
-import 'home_screen.dart';
-import 'login_screen.dart';
-import 'register_screen.dart';
-import 'create_scrap_collection_request_screen.dart';
-import 'app_shell.dart';
-import 'cart_screen.dart';
-import 'chatbot_screen.dart';
-import 'profile_screen.dart';
-import 'product_list_screen.dart';
+import 'app_shell.dart'; // Import file AppShell
+import 'screen/home_screen.dart';
+import 'screen/login_screen.dart';
+import 'screen/register_screen.dart';
+import 'screen/create_scrap_collection_request_screen.dart';
+import 'screen/product_list_screen.dart'; // Import trang sản phẩm
+import 'screen/chatbot_screen.dart'; // Nếu có
+import 'screen/admin_chat_screen.dart'; // Nếu có
+import 'screen/profile_screen.dart';
+
+// --- Global Keys ---
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
+final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,72 +29,49 @@ void main() async {
   runApp(const ProviderScope(child: MyApp()));
 }
 
-final _rootNavigatorKey = GlobalKey<NavigatorState>();
-final _shellNavigatorKey = GlobalKey<NavigatorState>();
-
+// --- Cấu hình Router ---
 final _router = GoRouter(
   navigatorKey: _rootNavigatorKey,
   initialLocation: '/',
-  refreshListenable: GoRouterRefreshStream(FirebaseAuth.instance.authStateChanges()),
-
-  redirect: (BuildContext context, GoRouterState state) {
-    final user = FirebaseAuth.instance.currentUser;
-    final loggedIn = user != null;
-
-    // Danh sách các trang KHÔNG cần đăng nhập vẫn xem được
-    final publicRoutes = ['/', '/login', '/register'];
-    final isPublicRoute = publicRoutes.contains(state.matchedLocation) ||
-        state.matchedLocation.startsWith('/product/');
-
-    // 1. Nếu chưa đăng nhập và cố vào trang bảo mật (không phải public) -> Đá về login
-    if (!loggedIn && !isPublicRoute) return '/login';
-
-    // 2. Nếu đã đăng nhập mà lại vào trang login/register -> Đá về trang chủ
-    if (loggedIn && (state.matchedLocation == '/login' || state.matchedLocation == '/register')) {
-      return '/';
-    }
-
-    return null; // Cho phép đi tiếp
+  // Tự động chuyển hướng nếu chưa đăng nhập (Tuỳ chỉnh logic này theo ý bạn)
+  redirect: (context, state) {
+    // Cho phép xem trang chủ và sản phẩm mà không cần login
+    return null;
   },
   routes: [
     GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
     GoRoute(path: '/register', builder: (context, state) => const RegisterScreen()),
 
-    // --- SHELL ROUTE (Thanh điều hướng dưới đáy) ---
+    // --- SHELL ROUTE (Chứa thanh điều hướng dưới đáy) ---
     ShellRoute(
       navigatorKey: _shellNavigatorKey,
       builder: (context, state, child) => AppShell(child: child),
       routes: [
-        // Trang chủ nằm trong Shell để hiện thanh menu dưới
-        GoRoute(
-            path: '/',
-            builder: (context, state) => const HomeScreen()
-        ),
+        // 1. Trang chủ
+        GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+
+        // 2. Thu gom (Hoặc Chatbot tùy bạn sắp xếp)
         GoRoute(path: '/create_scrap_collection_request', builder: (context, state) => const CreateScrapCollectionRequestScreen()),
-        GoRoute(path: '/cart', builder: (context, state) => const CartScreen()),
-        GoRoute(
-          path: '/products',
-          builder: (context, state) => const ProductListScreen(),
-        ),
+
+        // 3. Quét phụ phẩm (Nút Giữa)
+        GoRoute(path: '/create_scrap_collection_request', builder: (context, state) => const CreateScrapCollectionRequestScreen()),
+
+        // 4. Sản phẩm (Nút Bên Phải) -> Đã nối vào ProductListScreen
+        GoRoute(path: '/products', builder: (context, state) => const ProductListScreen()),
+
+        // 5. Cá nhân
         GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
-        GoRoute(
-          path: '/products',
-          builder: (context, state) => const ProductListScreen(),
-        ),
       ],
     ),
 
-    // Chi tiết sản phẩm (Full màn hình, che menu dưới)
+    // Các trang con (Chi tiết sản phẩm) - Che lấp cả thanh menu
     GoRoute(
       path: '/product/:id',
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: _rootNavigatorKey, // Để che luôn thanh menu dưới
       builder: (context, state) {
-        final productId = state.pathParameters['id'];
-        // TODO: Thay bằng ProductDetailScreen thật của bạn
-        return Scaffold(
-          appBar: AppBar(title: Text("Sản phẩm $productId")),
-          body: const Center(child: Text("Chi tiết sản phẩm")),
-        );
+        final product = state.extra as Product?; // Lấy dữ liệu truyền qua
+        final productId = state.pathParameters['id']!;
+        return ProductDetailScreen(productId: productId, extraProduct: product);
       },
     ),
   ],
@@ -101,25 +82,11 @@ class MyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Nếu bạn có dùng ThemeNotifier thì watch ở đây, tạm thời mình để mặc định
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'AgriMarket',
       theme: ThemeData(primarySwatch: Colors.green, useMaterial3: true),
       routerConfig: _router,
     );
-  }
-}
-
-class GoRouterRefreshStream extends ChangeNotifier {
-  GoRouterRefreshStream(Stream<dynamic> stream) {
-    notifyListeners();
-    _subscription = stream.asBroadcastStream().listen((_) => notifyListeners());
-  }
-  late final StreamSubscription<dynamic> _subscription;
-  @override
-  void dispose() {
-    _subscription.cancel();
-    super.dispose();
   }
 }

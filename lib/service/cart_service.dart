@@ -1,8 +1,8 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:doandidonghoa/product_model.dart';
+import 'package:doandidonghoa/model/product_model.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'cart_item_model.dart';
+import '../model/cart_item_model.dart';
 
 
 class CartService {
