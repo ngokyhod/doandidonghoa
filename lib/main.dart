@@ -55,7 +55,10 @@ final _router = GoRouter(
 
         // 3. Quét phụ phẩm (Nút Giữa)
         GoRoute(path: '/create_scrap_collection_request', builder: (context, state) => const CreateScrapCollectionRequestScreen()),
-
+        GoRoute(
+          path: '/chatbot',
+          builder: (context, state) => const ChatbotScreen(),
+        ),
         // 4. Sản phẩm (Nút Bên Phải) -> Đã nối vào ProductListScreen
         GoRoute(
           path: '/products',

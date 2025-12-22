@@ -285,7 +285,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildUtilityGrid() {
     final List<Map<String, dynamic>> utilities = [
       {'icon': Icons.recycling, 'label': 'Thu gom', 'route': '/create_scrap_collection_request', 'color': Colors.green},
-      {'icon': Icons.psychology, 'label': 'Chatbot', 'route': '/chatbot', 'color': Colors.blue},
+
       {'icon': Icons.chat, 'label': 'CSKH', 'route': '/admin_chat', 'color': Colors.orange},
       {'icon': Icons.spa, 'label': 'Phụ phẩm', 'route': '/products', 'color': Colors.purple},
     ];
