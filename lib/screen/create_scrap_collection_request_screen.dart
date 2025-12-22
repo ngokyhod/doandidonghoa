@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Để dùng InputFormatter
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
-import '../vietnam_address_data.dart'; // Import file dữ liệu địa chỉ
+import '../model/product_model.dart';
+import '../service/Product_Service.dart';
+import '../vietnam_address_data.dart'; // Giữ lại Import này để dùng địa chỉ
 
 class CreateScrapCollectionRequestScreen extends StatefulWidget {
   const CreateScrapCollectionRequestScreen({super.key});
@@ -18,34 +19,74 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
   // Controllers
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _productNameController = TextEditingController();
-  final _quantityController = TextEditingController();
+  final _weightController = TextEditingController();
   final _priceController = TextEditingController();
-  final _descriptionController = TextEditingController();
+  final _noteController = TextEditingController();
   final _addressController = TextEditingController();
 
-  // Biến lưu địa chỉ được chọn
+  // --- STATE CHO SẢN PHẨM ---
+  List<Product> _allProductsFromApi = [];
+  List<String> _categories = [];
+  List<Product> _filteredProducts = [];
+  String? _selectedCategory;
+  Product? _selectedProduct;
+  bool _isLoadingProduct = true;
+
+  // --- STATE CHO ĐỊA CHỈ (VietnamAddressData) ---
   String? _selectedCity;
   String? _selectedDistrict;
   String? _selectedWard;
+
+  // --- STATE ĐỘ ẨM ---
+  double _moistureValue = 15.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDataFromApi();
+  }
+
+  // Tải API sản phẩm
+  void _loadDataFromApi() async {
+    List<Product> products = await ProductService.fetchProducts();
+    if (mounted) {
+      setState(() {
+        _allProductsFromApi = products;
+        _categories = products
+            .map((p) => p.category)
+            .where((c) => c.isNotEmpty)
+            .toSet()
+            .toList();
+        _isLoadingProduct = false;
+      });
+    }
+  }
+
+  void _onCategoryChanged(String? newCategory) {
+    if (newCategory == null) return;
+    setState(() {
+      _selectedCategory = newCategory;
+      _selectedProduct = null;
+      _filteredProducts = _allProductsFromApi
+          .where((p) => p.category == newCategory)
+          .toList();
+    });
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
-    _productNameController.dispose();
-    _quantityController.dispose();
+    _weightController.dispose();
     _priceController.dispose();
-    _descriptionController.dispose();
+    _noteController.dispose();
     _addressController.dispose();
     super.dispose();
   }
 
-  // --- HÀM XỬ LÝ KHI BẤM GỬI ---
   void _handleSubmit() {
     if (_formKey.currentState!.validate()) {
-
-      // Kiểm tra Đăng nhập
+      // 1. Kiểm tra đăng nhập
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         showDialog(
@@ -54,10 +95,7 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
             title: const Text("Yêu cầu đăng nhập"),
             content: const Text("Bạn cần đăng nhập để gửi yêu cầu thu gom."),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text("Hủy"),
-              ),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Hủy")),
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(ctx);
@@ -71,9 +109,12 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
         return;
       }
 
-      // Xử lý gửi
+      // 2. Gửi dữ liệu (Giả lập)
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Gửi yêu cầu thành công! Đang chờ xử lý..."), backgroundColor: Colors.green),
+        SnackBar(
+          content: Text("Đã gửi: ${_selectedProduct?.title} (${_weightController.text}kg) - Độ ẩm: ${_moistureValue.toStringAsFixed(1)}%"),
+          backgroundColor: Colors.green,
+        ),
       );
     }
   }
@@ -81,202 +122,185 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Đăng ký thu gom"),
-        backgroundColor: Colors.green,
-        foregroundColor: Colors.white,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  "Thông tin người bán",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
-                ),
-                const SizedBox(height: 12),
+      appBar: AppBar(title: const Text("Đăng ký thu gom"), backgroundColor: Colors.green, foregroundColor: Colors.white),
+      body: _isLoadingProduct
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionTitle("Thông tin người bán"),
 
-                // --- 1. HỌ TÊN ---
-                TextFormField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: "Họ và tên",
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) return "Vui lòng nhập họ tên";
-                    final nameRegExp = RegExp(r"^[a-zA-ZÀ-ỹ\s]+$");
-                    if (!nameRegExp.hasMatch(value)) {
-                      return "Tên không được chứa số hoặc ký tự đặc biệt";
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
+              // HỌ TÊN
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: "Họ tên", border: OutlineInputBorder(), prefixIcon: Icon(Icons.person)),
+                validator: (val) {
+                  if (val == null || val.trim().isEmpty) return "Nhập họ tên";
+                  if (!RegExp(r"^[a-zA-ZÀ-ỹ\s]+$").hasMatch(val)) return "Tên không chứa số/ký tự lạ";
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
 
-                // --- 2. SỐ ĐIỆN THOẠI ---
-                TextFormField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  maxLength: 10,
-                  decoration: const InputDecoration(
-                    labelText: "Số điện thoại",
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.phone),
-                    counterText: "",
-                  ),
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  validator: (value) {
-                    if (value == null || value.isEmpty) return "Vui lòng nhập SĐT";
-                    if (value.length != 10 || !value.startsWith('0')) {
-                      return "SĐT phải có 10 chữ số và bắt đầu bằng số 0";
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 24),
+              // SỐ ĐIỆN THOẠI
+              TextFormField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                maxLength: 10,
+                decoration: const InputDecoration(labelText: "SĐT", border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone), counterText: ""),
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                validator: (val) => (val != null && val.length == 10 && val.startsWith('0')) ? null : "SĐT không hợp lệ",
+              ),
 
-                const Text(
-                  "Thông tin phụ phẩm",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
-                ),
-                const SizedBox(height: 12),
+              const SizedBox(height: 24),
+              _buildSectionTitle("Thông tin phụ phẩm"),
 
-                // --- 3. TÊN PHỤ PHẨM ---
-                TextFormField(
-                  controller: _productNameController,
-                  decoration: const InputDecoration(
-                    labelText: "Tên phụ phẩm (VD: Rơm, Vỏ trấu)",
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.grass),
-                  ),
-                  validator: (value) => value == null || value.isEmpty ? "Vui lòng nhập tên phụ phẩm" : null,
-                ),
-                const SizedBox(height: 12),
+              // DROPDOWN LOẠI SP
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(labelText: "Loại phụ phẩm", border: OutlineInputBorder(), prefixIcon: Icon(Icons.category)),
+                value: _selectedCategory,
+                items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                onChanged: _onCategoryChanged,
+                validator: (val) => val == null ? "Chọn loại" : null,
+              ),
+              const SizedBox(height: 12),
 
-                Row(
-                  children: [
-                    // --- 4. KHỐI LƯỢNG ---
-                    Expanded(
-                      child: TextFormField(
-                        controller: _quantityController,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: "Khối lượng (kg)",
-                          border: OutlineInputBorder(),
-                        ),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                        ],
-                        validator: (value) {
-                          if (value == null || value.isEmpty) return "Nhập KL";
-                          final n = double.tryParse(value);
-                          if (n == null || n <= 0) return "Phải > 0";
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    // --- 5. GIÁ MONG MUỐN ---
-                    Expanded(
-                      child: TextFormField(
-                        controller: _priceController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: "Giá (VNĐ)",
-                          border: OutlineInputBorder(),
-                        ),
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        validator: (value) {
-                          if (value == null || value.isEmpty) return "Nhập giá";
-                          final n = double.tryParse(value);
-                          if (n == null || n <= 0) return "Phải > 0";
-                          return null;
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
+              // DROPDOWN SẢN PHẨM CỤ THỂ
+              DropdownButtonFormField<Product>(
+                decoration: const InputDecoration(labelText: "Sản phẩm cụ thể", border: OutlineInputBorder(), prefixIcon: Icon(Icons.spa)),
+                value: _selectedProduct,
+                items: _filteredProducts.map((p) => DropdownMenuItem(value: p, child: Text(p.title))).toList(),
+                onChanged: (val) => setState(() => _selectedProduct = val),
+                validator: (val) => val == null ? "Chọn sản phẩm" : null,
+                disabledHint: const Text("Chọn loại trước"),
+              ),
+              const SizedBox(height: 12),
 
-                // --- MÔ TẢ ---
-                TextFormField(
-                  controller: _descriptionController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: "Mô tả chi tiết (Tình trạng, độ ẩm...)",
-                    border: OutlineInputBorder(),
-                    alignLabelWithHint: true,
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                const Text(
-                  "Địa chỉ thu gom",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
-                ),
-                const SizedBox(height: 12),
-
-                // --- CHỌN ĐỊA CHỈ ---
-                _buildAddressSelectors(),
-
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _addressController,
-                  decoration: const InputDecoration(
-                    labelText: "Số nhà, tên đường",
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.location_on),
-                  ),
-                  validator: (value) => value == null || value.isEmpty ? "Vui lòng nhập địa chỉ cụ thể" : null,
-                ),
-
-                const SizedBox(height: 32),
-
-                // --- NÚT GỬI ---
-                SizedBox(
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: _handleSubmit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: const Text(
-                      "GỬI YÊU CẦU",
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Row(
+                children: [
+                  // KHỐI LƯỢNG (Giới hạn 1 số lẻ + Max 1000kg)
+                  Expanded(
+                    child: TextFormField(
+                      controller: _weightController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}'))],
+                      decoration: const InputDecoration(labelText: "Khối lượng (kg)", border: OutlineInputBorder()),
+                      validator: (val) {
+                        if (val == null || val.isEmpty) return "Nhập KL";
+                        final n = double.tryParse(val);
+                        if (n == null || n <= 0) return "> 0";
+                        if (n > 1000) return "Max 1000kg";
+                        return null;
+                      },
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  // GIÁ MONG MUỐN
+                  Expanded(
+                    child: TextFormField(
+                      controller: _priceController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(labelText: "Giá mong muốn (VNĐ)", border: OutlineInputBorder()),
+                      validator: (val) => (val == null || val.isEmpty) ? "Nhập giá" : null,
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+              // THANH ĐỘ ẨM
+              _buildMoistureSlider(),
+
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _noteController,
+                maxLines: 2,
+                decoration: const InputDecoration(labelText: "Mô tả thêm (Tình trạng...)", border: OutlineInputBorder(), alignLabelWithHint: true),
+              ),
+
+              const SizedBox(height: 24),
+              _buildSectionTitle("Địa chỉ thu gom"),
+
+              // CHỌN ĐỊA CHỈ (Tỉnh/Huyện/Xã)
+              _buildAddressSelectors(),
+
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _addressController,
+                decoration: const InputDecoration(labelText: "Số nhà, tên đường", border: OutlineInputBorder(), prefixIcon: Icon(Icons.location_on)),
+                validator: (val) => (val == null || val.isEmpty) ? "Nhập địa chỉ cụ thể" : null,
+              ),
+
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _handleSubmit,
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                  child: const Text("GỬI YÊU CẦU", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
-                const SizedBox(height: 20),
-              ],
-            ),
+              ),
+              const SizedBox(height: 40),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // Widget chọn địa chỉ dùng VietnamAddressData
+  // Widget Thanh Độ Ẩm
+  Widget _buildMoistureSlider() {
+    Color color;
+    String text;
+    IconData icon;
+    if (_moistureValue <= 12) {
+      color = Colors.orange; text = "Rất khô (Rất tốt)"; icon = Icons.local_fire_department;
+    } else if (_moistureValue <= 16) {
+      color = Colors.green; text = "Đạt chuẩn"; icon = Icons.check_circle;
+    } else if (_moistureValue <= 22) {
+      color = Colors.blue; text = "Hơi ẩm"; icon = Icons.cloud;
+    } else {
+      color = Colors.red; text = "Ướt / Dính mưa"; icon = Icons.water_drop;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey[300]!)),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Độ ẩm:", style: TextStyle(fontWeight: FontWeight.bold)),
+              Text("${_moistureValue.toStringAsFixed(1)}%", style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          Slider(
+            value: _moistureValue, min: 5, max: 40, divisions: 70, activeColor: color,
+            onChanged: (v) => setState(() => _moistureValue = v),
+          ),
+          Row(children: [Icon(icon, color: color, size: 20), const SizedBox(width: 8), Text(text, style: TextStyle(color: color, fontWeight: FontWeight.bold))]),
+        ],
+      ),
+    );
+  }
+
+  // Widget Dropdown Địa chỉ (Sửa lỗi Null Safety)
   Widget _buildAddressSelectors() {
     return Column(
       children: [
         DropdownButtonFormField<String>(
           value: _selectedCity,
           decoration: const InputDecoration(labelText: "Tỉnh / Thành phố", border: OutlineInputBorder()),
-          items: VietnamAddressData.cities.map((city) => DropdownMenuItem(value: city, child: Text(city))).toList(),
+          items: VietnamAddressData.cities.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
           onChanged: (val) {
-            setState(() {
-              _selectedCity = val;
-              _selectedDistrict = null;
-              _selectedWard = null;
-            });
+            setState(() { _selectedCity = val; _selectedDistrict = null; _selectedWard = null; });
           },
           validator: (val) => val == null ? "Chọn Tỉnh/TP" : null,
         ),
@@ -284,14 +308,10 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
         DropdownButtonFormField<String>(
           value: _selectedDistrict,
           decoration: const InputDecoration(labelText: "Quận / Huyện", border: OutlineInputBorder()),
-          // SỬA LỖI Ở ĐÂY: Thêm <String>[] để Dart hiểu đúng kiểu dữ liệu
           items: (_selectedCity == null ? <String>[] : VietnamAddressData.districts[_selectedCity] ?? <String>[])
               .map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
           onChanged: _selectedCity == null ? null : (val) {
-            setState(() {
-              _selectedDistrict = val;
-              _selectedWard = null;
-            });
+            setState(() { _selectedDistrict = val; _selectedWard = null; });
           },
           validator: (val) => val == null ? "Chọn Quận/Huyện" : null,
         ),
@@ -299,7 +319,6 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
         DropdownButtonFormField<String>(
           value: _selectedWard,
           decoration: const InputDecoration(labelText: "Phường / Xã", border: OutlineInputBorder()),
-          // SỬA LỖI Ở ĐÂY TƯƠNG TỰ
           items: (_selectedDistrict == null ? <String>[] : VietnamAddressData.wards[_selectedDistrict] ?? <String>[])
               .map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
           onChanged: _selectedDistrict == null ? null : (val) => setState(() => _selectedWard = val),
@@ -307,5 +326,9 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
         ),
       ],
     );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)));
   }
 }

@@ -1,6 +1,8 @@
 import 'dart:io'; // Để dùng File
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart'; // Để dùng kIsWeb
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart'; // Để dùng XFile
 import '../service/chat_service.dart';
 
@@ -21,9 +23,36 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
 
   bool _isLoading = false;
   final ImagePicker _picker = ImagePicker();
-
+  bool _checkLogin() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text("Yêu cầu đăng nhập"),
+          content: const Text("Bạn cần đăng nhập để sử dụng tính năng Chatbot."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Hủy"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                context.push('/login'); // Chuyển sang trang đăng nhập
+              },
+              child: const Text("Đăng nhập ngay"),
+            ),
+          ],
+        ),
+      );
+      return false;
+    }
+    return true;
+  }
   // Gửi Text
   void _sendText() async {
+    if (!_checkLogin()) return;
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
@@ -44,6 +73,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
   // Gửi Ảnh
   void _pickAndSendImage() async {
     // 1. Chọn ảnh (trả về XFile)
+    if (!_checkLogin()) return;
     final XFile? photo = await _picker.pickImage(source: ImageSource.gallery);
 
     if (photo != null) {

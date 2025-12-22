@@ -1,4 +1,5 @@
 import 'package:doandidonghoa/model/product_model.dart';
+import 'package:doandidonghoa/screen/cart_screen.dart';
 import 'package:doandidonghoa/screen/product_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -75,15 +76,42 @@ final _router = GoRouter(
         GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
       ],
     ),
-
+    GoRoute(
+      path: '/cart',
+      builder: (context, state) => const CartScreen(),
+    ),
     // Các trang con (Chi tiết sản phẩm) - Che lấp cả thanh menu
     GoRoute(
       path: '/product/:id',
-      parentNavigatorKey: _rootNavigatorKey, // Để che luôn thanh menu dưới
+      parentNavigatorKey: _rootNavigatorKey, // Giữ nguyên key của bạn
       builder: (context, state) {
-        final product = state.extra as Product?; // Lấy dữ liệu truyền qua
-        final productId = state.pathParameters['id']!;
-        return ProductDetailScreen(productId: productId, extraProduct: product);
+        // 1. Lấy object Product được truyền kèm (từ danh sách sản phẩm)
+        final product = state.extra as Product?;
+
+        // 2. Kiểm tra an toàn:
+        // Vì màn hình Detail mới bắt buộc phải có object 'product' để hiển thị giá/tên
+        // Nếu người dùng reload trang web hoặc nhập link trực tiếp, 'product' sẽ bị null.
+        if (product == null) {
+          return Scaffold(
+            appBar: AppBar(title: const Text("Lỗi")),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text("Không tìm thấy thông tin sản phẩm."),
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () => context.go('/products'),
+                    child: const Text("Quay lại danh sách"),
+                  )
+                ],
+              ),
+            ),
+          );
+        }
+
+        // 3. Truyền đúng tham số 'product' (Không dùng productId nữa)
+        return ProductDetailScreen(product: product);
       },
     ),
 

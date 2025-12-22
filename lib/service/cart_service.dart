@@ -1,70 +1,37 @@
+import '../model/product_model.dart';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:doandidonghoa/model/product_model.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../model/cart_item_model.dart';
+class CartItem {
+  final Product product;
+  final double weight; // Khối lượng (kg)
 
+  CartItem({required this.product, required this.weight});
+}
 
 class CartService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // Dùng static list để lưu tạm trong bộ nhớ (khi tắt app sẽ mất).
+  // Nếu muốn lưu lâu dài cần dùng SQLite hoặc Firestore.
+  static final List<CartItem> _cartItems = [];
 
-  CollectionReference<Map<String, dynamic>> _getCartCollection() {
-    final user = _auth.currentUser;
-    if (user == null) {
-      throw Exception("User not logged in. Cannot access cart.");
-    }
-    return _firestore.collection('users').doc(user.uid).collection('cart');
-  }
+  static List<CartItem> get cartItems => _cartItems;
 
-  Stream<List<CartItem>> getCartItems() {
-    return _getCartCollection().snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) => CartItem.fromFirestore(doc)).toList();
-    });
-  }
-
-  // Sửa quantity thành double
-  Future<void> addProductToCart(Product product, double quantity, Map<String, String> selectedVariants) async {
-    final cartRef = _getCartCollection().doc(product.id);
-    final doc = await cartRef.get();
-
-    if (doc.exists) {
-      await cartRef.update({
-        'quantity': FieldValue.increment(quantity),
-      });
-    } else {
-      final newItem = CartItem(
-        productId: product.id,
-        title: product.title,
-        imageUrl: product.imageUrls.isNotEmpty ? product.imageUrls.first : '',
-        price: product.price,
-        quantity: quantity,
-        unit: product.unit,
-        selectedVariants: selectedVariants,
+  static void addToCart(Product product, double weight) {
+    // Kiểm tra xem sản phẩm đã có trong giỏ chưa, nếu có thì cộng thêm khối lượng
+    final index = _cartItems.indexWhere((item) => item.product.id == product.id);
+    if (index != -1) {
+      _cartItems[index] = CartItem(
+          product: product,
+          weight: _cartItems[index].weight + weight
       );
-      await cartRef.set(newItem.toMap());
-    }
-  }
-
-  // Sửa newQuantity thành double
-  Future<void> updateItemQuantity(String productId, double newQuantity) async {
-    if (newQuantity <= 0) {
-      await removeItemFromCart(productId);
     } else {
-      await _getCartCollection().doc(productId).update({'quantity': newQuantity});
+      _cartItems.add(CartItem(product: product, weight: weight));
     }
   }
 
-  Future<void> removeItemFromCart(String productId) async {
-    await _getCartCollection().doc(productId).delete();
+  static void removeFromCart(int index) {
+    _cartItems.removeAt(index);
   }
 
-  Future<void> clearCart() async {
-    final cartSnapshot = await _getCartCollection().get();
-    WriteBatch batch = _firestore.batch();
-    for (DocumentSnapshot doc in cartSnapshot.docs) {
-      batch.delete(doc.reference);
-    }
-    await batch.commit();
+  static double getTotalPrice() {
+    return _cartItems.fold(0, (sum, item) => sum + (item.product.price * item.weight));
   }
 }
