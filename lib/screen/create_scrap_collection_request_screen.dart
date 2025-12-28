@@ -1,10 +1,12 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../model/product_model.dart';
 import '../service/Product_Service.dart';
-import '../vietnam_address_data.dart'; // Giữ lại Import này để dùng địa chỉ
+import '../service/sendThuGomToSql.dart';
+import '../vietnam_address_data.dart'; // Đảm bảo bạn đã cập nhật file này theo AddressModel
 
 class CreateScrapCollectionRequestScreen extends StatefulWidget {
   const CreateScrapCollectionRequestScreen({super.key});
@@ -31,11 +33,12 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
   String? _selectedCategory;
   Product? _selectedProduct;
   bool _isLoadingProduct = true;
+  bool _isSubmitting = false;
 
-  // --- STATE CHO ĐỊA CHỈ (VietnamAddressData) ---
-  String? _selectedCity;
-  String? _selectedDistrict;
-  String? _selectedWard;
+  // --- STATE CHO ĐỊA CHỈ (Sử dụng AddressModel thay vì String) ---
+  AddressModel? _selectedCityModel;
+  AddressModel? _selectedDistrictModel;
+  AddressModel? _selectedWardModel;
 
   // --- STATE ĐỘ ẨM ---
   double _moistureValue = 15.0;
@@ -84,9 +87,8 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
     super.dispose();
   }
 
-  void _handleSubmit() {
+  Future<void> _handleSubmit() async {
     if (_formKey.currentState!.validate()) {
-      // 1. Kiểm tra đăng nhập
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         showDialog(
@@ -109,13 +111,86 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
         return;
       }
 
-      // 2. Gửi dữ liệu (Giả lập)
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Đã gửi: ${_selectedProduct?.title} (${_weightController.text}kg) - Độ ẩm: ${_moistureValue.toStringAsFixed(1)}%"),
-          backgroundColor: Colors.green,
-        ),
-      );
+      setState(() => _isSubmitting = true);
+      try {
+        // Chuẩn bị địa chỉ đầy đủ để hiển thị
+        String fullAddressStr = "${_addressController.text}, ${_selectedWardModel?.name}, ${_selectedDistrictModel?.name}, ${_selectedCityModel?.name}";
+
+        final requestData = {
+          'uid': user.uid,
+          'email': user.email ?? "",
+          'contactName': _nameController.text.trim(),
+          'contactPhone': _phoneController.text.trim(),
+
+          // Lưu cả MÃ (để xử lý) và TÊN (để hiển thị) lên Firebase
+          'maTinh': _selectedCityModel?.code ?? "",
+          'tenTinh': _selectedCityModel?.name ?? "",
+          'maQuan': _selectedDistrictModel?.code ?? "",
+          'tenQuan': _selectedDistrictModel?.name ?? "",
+          'maXa': _selectedWardModel?.code ?? "",
+          'tenXa': _selectedWardModel?.name ?? "",
+
+          'diaChiCuThe': _addressController.text.trim(),
+          'fullAddress': fullAddressStr,
+          'category': _selectedCategory,
+          'productName': _selectedProduct?.title ?? "Chưa chọn",
+          'productId': _selectedProduct?.id ?? "",
+          'amount': double.tryParse(_weightController.text) ?? 0,
+          'giaTriMongMuon': double.tryParse(_priceController.text) ?? 0,
+          'moTa': _noteController.text.trim(),
+          'doAm': _moistureValue,
+          'trangThaiXuLy': 'MoiYeuCau',
+          'createdAt': FieldValue.serverTimestamp(),
+        };
+
+        // 1. Đẩy lên Collection "ThuGom" (Firebase)
+        await FirebaseFirestore.instance.collection('ThuGom').add(requestData);
+
+        // 2. Gửi sang SQL Server (QUAN TRỌNG: Gửi CODE chứ không gửi TÊN)
+        bool sqlSuccess = await sendThuGomToSql.sendThuGom(
+          uid: user.uid,
+          hoTen: _nameController.text,
+          sdt: _phoneController.text,
+          address: _addressController.text,
+
+          // --- Gửi MÃ (Code) sang SQL để khớp với bảng XaPhuongs ---
+          maTinh: _selectedCityModel?.code ?? "",     // VD: T01
+          maQuan: _selectedDistrictModel?.code ?? "", // VD: Q0101
+          maXa: _selectedWardModel?.code ?? "",       // VD: X010101
+          // --------------------------------------------------------
+
+          tenSP: _selectedProduct?.title ?? "",
+          loaiSP: _selectedCategory ?? "",
+          khoiLuong: double.tryParse(_weightController.text) ?? 0,
+          gia: double.tryParse(_priceController.text) ?? 0,
+          doAm: _moistureValue,
+          ghiChu: _noteController.text,
+          hinhAnh: [], // Gửi mảng rỗng để tránh lỗi validate API
+        );
+
+        if (mounted) {
+          // Thông báo dựa trên kết quả SQL
+          if (sqlSuccess) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("✅ Gửi yêu cầu thành công!"), backgroundColor: Colors.green),
+            );
+            context.pop();
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("⚠️ Đã lưu Firebase nhưng lỗi đồng bộ SQL."), backgroundColor: Colors.orange),
+            );
+            context.pop(); // Vẫn cho thoát vì đã lưu được ở Firebase
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("❌ Lỗi: $e"), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -182,7 +257,7 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
 
               Row(
                 children: [
-                  // KHỐI LƯỢNG (Giới hạn 1 số lẻ + Max 1000kg)
+                  // KHỐI LƯỢNG
                   Expanded(
                     child: TextFormField(
                       controller: _weightController,
@@ -226,7 +301,7 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
               const SizedBox(height: 24),
               _buildSectionTitle("Địa chỉ thu gom"),
 
-              // CHỌN ĐỊA CHỈ (Tỉnh/Huyện/Xã)
+              // CHỌN ĐỊA CHỈ (Đã cập nhật dùng AddressModel)
               _buildAddressSelectors(),
 
               const SizedBox(height: 12),
@@ -241,9 +316,11 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: _handleSubmit,
+                  onPressed: _isSubmitting ? null : _handleSubmit,
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                  child: const Text("GỬI YÊU CẦU", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  child: _isSubmitting
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("GỬI YÊU CẦU", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(height: 40),
@@ -291,37 +368,56 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
     );
   }
 
-  // Widget Dropdown Địa chỉ (Sửa lỗi Null Safety)
+  // Widget Dropdown Địa chỉ (Sửa logic lấy Mã và load động)
   Widget _buildAddressSelectors() {
     return Column(
       children: [
-        DropdownButtonFormField<String>(
-          value: _selectedCity,
+        // 1. Tỉnh / TP
+        DropdownButtonFormField<AddressModel>(
+          value: _selectedCityModel,
           decoration: const InputDecoration(labelText: "Tỉnh / Thành phố", border: OutlineInputBorder()),
-          items: VietnamAddressData.cities.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+          // Lấy list provinces từ file dữ liệu mới
+          items: VietnamAddressData.provinces.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
           onChanged: (val) {
-            setState(() { _selectedCity = val; _selectedDistrict = null; _selectedWard = null; });
+            setState(() {
+              _selectedCityModel = val;
+              _selectedDistrictModel = null;
+              _selectedWardModel = null;
+            });
           },
           validator: (val) => val == null ? "Chọn Tỉnh/TP" : null,
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-          value: _selectedDistrict,
+
+        // 2. Quận / Huyện
+        DropdownButtonFormField<AddressModel>(
+          value: _selectedDistrictModel,
           decoration: const InputDecoration(labelText: "Quận / Huyện", border: OutlineInputBorder()),
-          items: (_selectedCity == null ? <String>[] : VietnamAddressData.districts[_selectedCity] ?? <String>[])
-              .map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
-          onChanged: _selectedCity == null ? null : (val) {
-            setState(() { _selectedDistrict = val; _selectedWard = null; });
+          // Lấy list quận dựa theo CODE của Tỉnh
+          items: (_selectedCityModel == null
+              ? <AddressModel>[]
+              : VietnamAddressData.districts[_selectedCityModel!.code] ?? [])
+              .map((d) => DropdownMenuItem(value: d, child: Text(d.name))).toList(),
+          onChanged: _selectedCityModel == null ? null : (val) {
+            setState(() {
+              _selectedDistrictModel = val;
+              _selectedWardModel = null;
+            });
           },
           validator: (val) => val == null ? "Chọn Quận/Huyện" : null,
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-          value: _selectedWard,
+
+        // 3. Phường / Xã
+        DropdownButtonFormField<AddressModel>(
+          value: _selectedWardModel,
           decoration: const InputDecoration(labelText: "Phường / Xã", border: OutlineInputBorder()),
-          items: (_selectedDistrict == null ? <String>[] : VietnamAddressData.wards[_selectedDistrict] ?? <String>[])
-              .map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
-          onChanged: _selectedDistrict == null ? null : (val) => setState(() => _selectedWard = val),
+          // Lấy list phường dựa theo CODE của Quận
+          items: (_selectedDistrictModel == null
+              ? <AddressModel>[]
+              : VietnamAddressData.wards[_selectedDistrictModel!.code] ?? [])
+              .map((w) => DropdownMenuItem(value: w, child: Text(w.name))).toList(),
+          onChanged: _selectedDistrictModel == null ? null : (val) => setState(() => _selectedWardModel = val),
           validator: (val) => val == null ? "Chọn Phường/Xã" : null,
         ),
       ],
