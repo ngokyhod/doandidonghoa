@@ -10,7 +10,7 @@ class ApiService {
   }
 
   // 1. PUSH: Gửi thông tin đăng ký sang Visual
-  static Future<bool> syncUserToBackend(String uid, String email, String name, String phone) async {
+  static Future<bool> syncUserToBackend(String uid, String email, String name, String phone, String password) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/sync-user'),
@@ -19,7 +19,8 @@ class ApiService {
           'FirebaseUid': uid,
           'FullName': name,
           'Email': email,
-          'Phone': phone
+          'Phone': phone,
+          'Password': password
         }),
       );
 
