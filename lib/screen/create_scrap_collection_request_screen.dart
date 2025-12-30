@@ -5,8 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../model/product_model.dart';
 import '../service/Product_Service.dart';
-import '../service/sendThuGomToSql.dart';
-import '../vietnam_address_data.dart'; // Đảm bảo bạn đã cập nhật file này theo AddressModel
+import '../service/ThuGomService.dart'; // <--- Import Service mới
+import '../vietnam_address_data.dart'; // File chứa AddressModel
 
 class CreateScrapCollectionRequestScreen extends StatefulWidget {
   const CreateScrapCollectionRequestScreen({super.key});
@@ -26,7 +26,7 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
   final _noteController = TextEditingController();
   final _addressController = TextEditingController();
 
-  // --- STATE CHO SẢN PHẨM ---
+  // --- STATE SẢN PHẨM ---
   List<Product> _allProductsFromApi = [];
   List<String> _categories = [];
   List<Product> _filteredProducts = [];
@@ -35,12 +35,12 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
   bool _isLoadingProduct = true;
   bool _isSubmitting = false;
 
-  // --- STATE CHO ĐỊA CHỈ (Sử dụng AddressModel thay vì String) ---
+  // --- STATE ĐỊA CHỈ (Dùng AddressModel) ---
   AddressModel? _selectedCityModel;
   AddressModel? _selectedDistrictModel;
   AddressModel? _selectedWardModel;
 
-  // --- STATE ĐỘ ẨM ---
+  // --- STATE KHÁC ---
   double _moistureValue = 15.0;
 
   @override
@@ -49,8 +49,9 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
     _loadDataFromApi();
   }
 
-  // Tải API sản phẩm
+  // Tải danh sách sản phẩm từ API
   void _loadDataFromApi() async {
+    // Sử dụng ProductService để lấy dữ liệu thật
     List<Product> products = await ProductService.fetchProducts();
     if (mounted) {
       setState(() {
@@ -88,110 +89,120 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
   }
 
   Future<void> _handleSubmit() async {
-    if (_formKey.currentState!.validate()) {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text("Yêu cầu đăng nhập"),
-            content: const Text("Bạn cần đăng nhập để gửi yêu cầu thu gom."),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Hủy")),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  context.push('/login');
-                },
-                child: const Text("Đăng nhập ngay"),
-              ),
-            ],
-          ),
-        );
-        return;
-      }
+    // 1. Validate Form
+    if (!_formKey.currentState!.validate()) return;
 
-      setState(() => _isSubmitting = true);
-      try {
-        // Chuẩn bị địa chỉ đầy đủ để hiển thị
-        String fullAddressStr = "${_addressController.text}, ${_selectedWardModel?.name}, ${_selectedDistrictModel?.name}, ${_selectedCityModel?.name}";
-
-        final requestData = {
-          'uid': user.uid,
-          'email': user.email ?? "",
-          'contactName': _nameController.text.trim(),
-          'contactPhone': _phoneController.text.trim(),
-
-          // Lưu cả MÃ (để xử lý) và TÊN (để hiển thị) lên Firebase
-          'maTinh': _selectedCityModel?.code ?? "",
-          'tenTinh': _selectedCityModel?.name ?? "",
-          'maQuan': _selectedDistrictModel?.code ?? "",
-          'tenQuan': _selectedDistrictModel?.name ?? "",
-          'maXa': _selectedWardModel?.code ?? "",
-          'tenXa': _selectedWardModel?.name ?? "",
-
-          'diaChiCuThe': _addressController.text.trim(),
-          'fullAddress': fullAddressStr,
-          'category': _selectedCategory,
-          'productName': _selectedProduct?.title ?? "Chưa chọn",
-          'productId': _selectedProduct?.id ?? "",
-          'amount': double.tryParse(_weightController.text) ?? 0,
-          'giaTriMongMuon': double.tryParse(_priceController.text) ?? 0,
-          'moTa': _noteController.text.trim(),
-          'doAm': _moistureValue,
-          'trangThaiXuLy': 'MoiYeuCau',
-          'createdAt': FieldValue.serverTimestamp(),
-        };
-
-        // 1. Đẩy lên Collection "ThuGom" (Firebase)
-        await FirebaseFirestore.instance.collection('ThuGom').add(requestData);
-
-        // 2. Gửi sang SQL Server (QUAN TRỌNG: Gửi CODE chứ không gửi TÊN)
-        bool sqlSuccess = await sendThuGomToSql.sendThuGom(
-          uid: user.uid,
-          hoTen: _nameController.text,
-          sdt: _phoneController.text,
-          address: _addressController.text,
-
-          // --- Gửi MÃ (Code) sang SQL để khớp với bảng XaPhuongs ---
-          maTinh: _selectedCityModel?.code ?? "",     // VD: T01
-          maQuan: _selectedDistrictModel?.code ?? "", // VD: Q0101
-          maXa: _selectedWardModel?.code ?? "",       // VD: X010101
-          // --------------------------------------------------------
-
-          tenSP: _selectedProduct?.title ?? "",
-          loaiSP: _selectedCategory ?? "",
-          khoiLuong: double.tryParse(_weightController.text) ?? 0,
-          gia: double.tryParse(_priceController.text) ?? 0,
-          doAm: _moistureValue,
-          ghiChu: _noteController.text,
-          hinhAnh: [], // Gửi mảng rỗng để tránh lỗi validate API
-        );
-
-        if (mounted) {
-          // Thông báo dựa trên kết quả SQL
-          if (sqlSuccess) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("✅ Gửi yêu cầu thành công!"), backgroundColor: Colors.green),
-            );
-            context.pop();
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("⚠️ Đã lưu Firebase nhưng lỗi đồng bộ SQL."), backgroundColor: Colors.orange),
-            );
-            context.pop(); // Vẫn cho thoát vì đã lưu được ở Firebase
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("❌ Lỗi: $e"), backgroundColor: Colors.red),
-          );
-        }
-      } finally {
-        if (mounted) setState(() => _isSubmitting = false);
-      }
+    // 2. Validate Đăng nhập
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      _showLoginDialog();
+      return;
     }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      // Chuẩn bị dữ liệu hiển thị (Tên) và dữ liệu xử lý (Mã)
+      String fullAddressStr = "${_addressController.text}, ${_selectedWardModel?.name}, ${_selectedDistrictModel?.name}, ${_selectedCityModel?.name}";
+
+      // --- BƯỚC 3: GỬI FIREBASE (Lưu để hiển thị trên App) ---
+      final requestData = {
+        'uid': user.uid,
+        'email': user.email ?? "",
+        'contactName': _nameController.text.trim(),
+        'contactPhone': _phoneController.text.trim(),
+
+        // Lưu cả Mã và Tên lên Firebase cho tiện
+        'maTinh': _selectedCityModel?.code ?? "",
+        'tenTinh': _selectedCityModel?.name ?? "",
+        'maQuan': _selectedDistrictModel?.code ?? "",
+        'tenQuan': _selectedDistrictModel?.name ?? "",
+        'maXa': _selectedWardModel?.code ?? "",
+        'tenXa': _selectedWardModel?.name ?? "",
+
+        'diaChiCuThe': _addressController.text.trim(),
+        'fullAddress': fullAddressStr,
+
+        'category': _selectedCategory,
+        'productName': _selectedProduct?.title ?? "Chưa chọn",
+        'productId': _selectedProduct?.id ?? "",
+
+        'amount': double.tryParse(_weightController.text) ?? 0,
+        'giaTriMongMuon': double.tryParse(_priceController.text) ?? 0,
+        'moTa': _noteController.text.trim(),
+        'doAm': _moistureValue,
+        'trangThaiXuLy': 'MoiYeuCau',
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+
+      await FirebaseFirestore.instance.collection('ThuGom').add(requestData);
+      print("✅ Đã lưu Firebase");
+
+      // --- BƯỚC 4: GỬI SQL SERVER (Dùng ThuGomService mới) ---
+      bool sqlSuccess = await ThuGomService.createThuGomRequest(
+        uid: user.uid,
+        hoTen: _nameController.text,
+        sdt: _phoneController.text,
+        diaChiCuThe: _addressController.text,
+
+        // QUAN TRỌNG: Gửi CODE (T01, Q001...) sang SQL
+        maTinh: _selectedCityModel?.code ?? "",
+        maQuan: _selectedDistrictModel?.code ?? "",
+        maXa: _selectedWardModel?.code ?? "",
+
+        tenSP: _selectedProduct?.title ?? "",
+        loaiSP: _selectedCategory ?? "",
+        khoiLuong: double.tryParse(_weightController.text) ?? 0,
+        giaMongMuon: double.tryParse(_priceController.text) ?? 0,
+        doAm: _moistureValue,
+        ghiChu: _noteController.text,
+
+        hinhAnh: [], // Gửi mảng rỗng để tránh lỗi API
+        thoiGianSanSang: DateTime.now(), // Mặc định là ngay bây giờ
+      );
+
+      if (mounted) {
+        if (sqlSuccess) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("✅ Gửi yêu cầu thành công!"), backgroundColor: Colors.green),
+          );
+          context.pop();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("⚠️ Đã lưu App nhưng lỗi đồng bộ Server."), backgroundColor: Colors.orange),
+          );
+          context.pop(); // Vẫn cho thoát vì Firebase đã nhận
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("❌ Lỗi: $e"), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  void _showLoginDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Yêu cầu đăng nhập"),
+        content: const Text("Bạn cần đăng nhập để gửi yêu cầu thu gom."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Hủy")),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.push('/login');
+            },
+            child: const Text("Đăng nhập ngay"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -208,20 +219,12 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildSectionTitle("Thông tin người bán"),
-
-              // HỌ TÊN
               TextFormField(
                 controller: _nameController,
                 decoration: const InputDecoration(labelText: "Họ tên", border: OutlineInputBorder(), prefixIcon: Icon(Icons.person)),
-                validator: (val) {
-                  if (val == null || val.trim().isEmpty) return "Nhập họ tên";
-                  if (!RegExp(r"^[a-zA-ZÀ-ỹ\s]+$").hasMatch(val)) return "Tên không chứa số/ký tự lạ";
-                  return null;
-                },
+                validator: (val) => (val == null || val.trim().isEmpty) ? "Nhập họ tên" : null,
               ),
               const SizedBox(height: 12),
-
-              // SỐ ĐIỆN THOẠI
               TextFormField(
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
@@ -230,11 +233,9 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 validator: (val) => (val != null && val.length == 10 && val.startsWith('0')) ? null : "SĐT không hợp lệ",
               ),
-
               const SizedBox(height: 24),
-              _buildSectionTitle("Thông tin phụ phẩm"),
 
-              // DROPDOWN LOẠI SP
+              _buildSectionTitle("Thông tin phụ phẩm"),
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: "Loại phụ phẩm", border: OutlineInputBorder(), prefixIcon: Icon(Icons.category)),
                 value: _selectedCategory,
@@ -243,8 +244,6 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
                 validator: (val) => val == null ? "Chọn loại" : null,
               ),
               const SizedBox(height: 12),
-
-              // DROPDOWN SẢN PHẨM CỤ THỂ
               DropdownButtonFormField<Product>(
                 decoration: const InputDecoration(labelText: "Sản phẩm cụ thể", border: OutlineInputBorder(), prefixIcon: Icon(Icons.spa)),
                 value: _selectedProduct,
@@ -254,27 +253,18 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
                 disabledHint: const Text("Chọn loại trước"),
               ),
               const SizedBox(height: 12),
-
               Row(
                 children: [
-                  // KHỐI LƯỢNG
                   Expanded(
                     child: TextFormField(
                       controller: _weightController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}'))],
                       decoration: const InputDecoration(labelText: "Khối lượng (kg)", border: OutlineInputBorder()),
-                      validator: (val) {
-                        if (val == null || val.isEmpty) return "Nhập KL";
-                        final n = double.tryParse(val);
-                        if (n == null || n <= 0) return "> 0";
-                        if (n > 1000) return "Max 1000kg";
-                        return null;
-                      },
+                      validator: (val) => (val == null || val.isEmpty) ? "Nhập KL" : null,
                     ),
                   ),
                   const SizedBox(width: 12),
-                  // GIÁ MONG MUỐN
                   Expanded(
                     child: TextFormField(
                       controller: _priceController,
@@ -286,32 +276,28 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
                   ),
                 ],
               ),
-
               const SizedBox(height: 24),
-              // THANH ĐỘ ẨM
-              _buildMoistureSlider(),
 
+              _buildMoistureSlider(),
               const SizedBox(height: 12),
+
               TextFormField(
                 controller: _noteController,
                 maxLines: 2,
                 decoration: const InputDecoration(labelText: "Mô tả thêm (Tình trạng...)", border: OutlineInputBorder(), alignLabelWithHint: true),
               ),
-
               const SizedBox(height: 24),
+
               _buildSectionTitle("Địa chỉ thu gom"),
-
-              // CHỌN ĐỊA CHỈ (Đã cập nhật dùng AddressModel)
-              _buildAddressSelectors(),
-
+              _buildAddressSelectors(), // Widget chọn địa chỉ đã sửa
               const SizedBox(height: 12),
               TextFormField(
                 controller: _addressController,
                 decoration: const InputDecoration(labelText: "Số nhà, tên đường", border: OutlineInputBorder(), prefixIcon: Icon(Icons.location_on)),
                 validator: (val) => (val == null || val.isEmpty) ? "Nhập địa chỉ cụ thể" : null,
               ),
-
               const SizedBox(height: 32),
+
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -331,7 +317,7 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
     );
   }
 
-  // Widget Thanh Độ Ẩm
+  // --- CÁC WIDGET CON (Giữ nguyên logic cũ nhưng đổi tên biến cho gọn) ---
   Widget _buildMoistureSlider() {
     Color color;
     String text;
@@ -368,51 +354,35 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
     );
   }
 
-  // Widget Dropdown Địa chỉ (Sửa logic lấy Mã và load động)
   Widget _buildAddressSelectors() {
     return Column(
       children: [
-        // 1. Tỉnh / TP
         DropdownButtonFormField<AddressModel>(
           value: _selectedCityModel,
           decoration: const InputDecoration(labelText: "Tỉnh / Thành phố", border: OutlineInputBorder()),
-          // Lấy list provinces từ file dữ liệu mới
           items: VietnamAddressData.provinces.map((p) => DropdownMenuItem(value: p, child: Text(p.name))).toList(),
           onChanged: (val) {
-            setState(() {
-              _selectedCityModel = val;
-              _selectedDistrictModel = null;
-              _selectedWardModel = null;
-            });
+            setState(() { _selectedCityModel = val; _selectedDistrictModel = null; _selectedWardModel = null; });
           },
           validator: (val) => val == null ? "Chọn Tỉnh/TP" : null,
         ),
         const SizedBox(height: 12),
-
-        // 2. Quận / Huyện
         DropdownButtonFormField<AddressModel>(
           value: _selectedDistrictModel,
           decoration: const InputDecoration(labelText: "Quận / Huyện", border: OutlineInputBorder()),
-          // Lấy list quận dựa theo CODE của Tỉnh
           items: (_selectedCityModel == null
               ? <AddressModel>[]
               : VietnamAddressData.districts[_selectedCityModel!.code] ?? [])
               .map((d) => DropdownMenuItem(value: d, child: Text(d.name))).toList(),
           onChanged: _selectedCityModel == null ? null : (val) {
-            setState(() {
-              _selectedDistrictModel = val;
-              _selectedWardModel = null;
-            });
+            setState(() { _selectedDistrictModel = val; _selectedWardModel = null; });
           },
           validator: (val) => val == null ? "Chọn Quận/Huyện" : null,
         ),
         const SizedBox(height: 12),
-
-        // 3. Phường / Xã
         DropdownButtonFormField<AddressModel>(
           value: _selectedWardModel,
           decoration: const InputDecoration(labelText: "Phường / Xã", border: OutlineInputBorder()),
-          // Lấy list phường dựa theo CODE của Quận
           items: (_selectedDistrictModel == null
               ? <AddressModel>[]
               : VietnamAddressData.wards[_selectedDistrictModel!.code] ?? [])
