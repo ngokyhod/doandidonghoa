@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../service/cart_service.dart';
+import '../screen/checkout_screen.dart'; // Đảm bảo import đúng file
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -26,6 +27,7 @@ class _CartScreenState extends State<CartScreen> {
       ),
       body: cartItems.isEmpty
           ? Center(
+        // --- TRƯỜNG HỢP GIỎ HÀNG TRỐNG ---
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -34,13 +36,18 @@ class _CartScreenState extends State<CartScreen> {
             const Text("Giỏ hàng đang trống", style: TextStyle(fontSize: 18, color: Colors.grey)),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () => context.go('/products'), // Quay lại trang sản phẩm
+              onPressed: () {
+                // Giỏ hàng trống thì quay về trang danh sách sản phẩm để mua
+                context.go('/products');
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
               child: const Text("Đi mua sắm ngay"),
             )
           ],
         ),
       )
           : Column(
+        // --- TRƯỜNG HỢP CÓ SẢN PHẨM ---
         children: [
           // Danh sách sản phẩm
           Expanded(
@@ -52,7 +59,7 @@ class _CartScreenState extends State<CartScreen> {
                   margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: ListTile(
                     leading: Image.network(
-                      item.product.imageUrls.first,
+                      item.product.imageUrls.isNotEmpty ? item.product.imageUrls.first : '',
                       width: 50, height: 50, fit: BoxFit.cover,
                       errorBuilder: (_,__,___) => const Icon(Icons.image),
                     ),
@@ -81,9 +88,9 @@ class _CartScreenState extends State<CartScreen> {
           // Phần tổng tiền và nút bấm
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: Colors.white,
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, -2))],
+              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, -2))],
             ),
             child: Column(
               children: [
@@ -97,13 +104,11 @@ class _CartScreenState extends State<CartScreen> {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    // Nút Mua tiếp (Thoát ra trang sản phẩm)
+                    // Nút Mua tiếp
                     Expanded(
                       flex: 1,
                       child: OutlinedButton(
                         onPressed: () {
-                          // Nếu dùng context.pop() sẽ quay lại trang Detail
-                          // Nếu muốn về hẳn trang danh sách sản phẩm thì dùng context.go('/products')
                           context.go('/products');
                         },
                         style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
@@ -111,12 +116,22 @@ class _CartScreenState extends State<CartScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    // Nút Thanh toán (Giả lập)
+
+                    // Nút Thanh toán (CHUYỂN HƯỚNG CHECKOUT Ở ĐÂY)
                     Expanded(
                       flex: 2,
                       child: ElevatedButton(
                         onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Chức năng thanh toán đang phát triển")));
+                          // Gọi Class CheckoutScreen (Chữ C viết hoa)
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => CheckoutScreen(
+                                cartItems: cartItems,
+                                totalAmount: totalPrice,
+                              ),
+                            ),
+                          );
                         },
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.green, padding: const EdgeInsets.symmetric(vertical: 14)),
                         child: const Text("Thanh toán", style: TextStyle(color: Colors.white, fontSize: 16)),
