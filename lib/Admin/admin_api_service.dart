@@ -1,0 +1,110 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
+
+class AdminApiService {
+  static String get baseUrl {
+    if (kIsWeb) return 'https://localhost:7240/api/AdminApi';
+    return 'http://10.0.2.2:7240/api/AdminApi';
+  }
+
+  // 1. Dashboard tổng quan
+  static Future<Map<String, dynamic>?> getDashboard() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/dashboard'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint("❌ AdminApi Error (Dashboard): $e");
+    }
+    return null;
+  }
+
+  // 2. Danh sách đơn hàng
+  static Future<List<dynamic>> getOrders({String status = "All"}) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/orders?status=$status'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      }
+    } catch (e) {
+      debugPrint("❌ AdminApi Error (Orders): $e");
+    }
+    return [];
+  }
+
+  // 3. Cập nhật trạng thái đơn
+  static Future<bool> updateOrderStatus(String maDonHang, String trangThaiMoi) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/orders/update-status'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'MaDonHang': maDonHang,
+          'TrangThaiMoi': trangThaiMoi,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("❌ AdminApi Error (UpdateStatus): $e");
+      return false;
+    }
+  }
+
+  // 4. Danh sách thu gom
+  static Future<List<dynamic>> getCollections() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/collections'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      }
+    } catch (e) {
+      debugPrint("❌ AdminApi Error (Collections): $e");
+    }
+    return [];
+  }
+
+  // 5. Danh sách sản phẩm
+  static Future<List<dynamic>> getProducts() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/products'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      }
+    } catch (e) {
+      debugPrint("❌ AdminApi Error (Products): $e");
+    }
+    return [];
+  }
+
+  // --- MỚI: API QUẢN LÝ NGƯỜI DÙNG ---
+
+  // Cập nhật thông tin/trạng thái khách hàng về SQL Server
+  static Future<bool> syncUserUpdate(Map<String, dynamic> userData) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/users/sync-update'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(userData),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("❌ AdminApi Error (SyncUser): $e");
+      return false;
+    }
+  }
+
+  // Khóa tài khoản khách hàng
+  static Future<bool> blockUser(String firebaseUid) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/users/block/$firebaseUid'),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("❌ AdminApi Error (BlockUser): $e");
+      return false;
+    }
+  }
+}

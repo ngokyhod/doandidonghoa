@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../service/CheckoutService.dart';
 import '../service/cart_service.dart';
+import 'order_complete_screen.dart';
 class CheckoutScreen extends StatefulWidget {
   final List<CartItem> cartItems;
   final double totalAmount;
@@ -100,10 +101,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               const SnackBar(content: Text("✅ Đặt hàng thành công!"), backgroundColor: Colors.green),
             );
 
-            // 3. Về trang chủ (Xóa hết stack màn hình cũ)
-            // Nếu dùng GoRouter: context.go('/');
-            // Nếu dùng Navigator:
-            Navigator.of(context).popUntil((route) => route.isFirst);
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const OrderCompleteScreen(),
+              ),
+            );
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text("⚠️ Đã lưu App nhưng lỗi đồng bộ Server."), backgroundColor: Colors.orange),
