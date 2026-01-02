@@ -87,16 +87,25 @@ class Product with _$Product {
   }) = _Product;
 
   // 1. Dùng cho Firebase (Giữ nguyên, reviews mặc định rỗng nếu chưa có)
+  // Trong class Product
   factory Product.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+
+    // Xử lý ảnh: Vì C# gửi lên 1 chuỗi 'anhSanPham' nhưng App dùng List
+    String imgUrl = data['imageUrls'] ?? '';
+    // Nếu ảnh là đường dẫn tương đối từ SQL, Firebase cũng lưu y hệt
+    // Nhưng trong hàm fetchProducts ở trên tôi không xử lý lại ảnh cho Firebase
+    // vì lúc Sync C# tôi đã bảo bạn thêm domain vào rồi.
+
     return Product(
-      id: doc.id,
-      title: data['title'] ?? '',
+      id: data['id'] ?? doc.id,
+      title: data['title'] ?? 'Sản phẩm',
       price: (data['price'] ?? 0).toDouble(),
-      unit: data['unit'] ?? '',
-      imageUrls: List<String>.from(data['imageUrls'] ?? []),
+      imageUrls: imgUrl.isNotEmpty ? [imgUrl] : [],
       category: data['category'] ?? '',
-      sellerName: data['sellerName'] ?? 'Saika Hana',
+      unit: data['unit'] ?? 'kg',
+      description: data['description'] ?? '',
+      stockQuantity: (data['stockQuantity'] ?? 0).toInt(), // Nếu có sync tồn kho
     );
   }
 

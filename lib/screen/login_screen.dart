@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:go_router/go_router.dart';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -19,7 +19,36 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // Client ID for Web platform
   static const String _webClientId = '608328512668-dojpfabus8lsstmt203ogagv6c0epcrc.apps.googleusercontent.com';
+  Future<void> _checkRoleAndRedirect(User user) async {
+    try {
+      // Lấy dữ liệu user từ Firestore (giả sử collection tên là 'users')
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
 
+      if (mounted) {
+        if (userDoc.exists) {
+          // Lấy field 'role', nếu không có thì mặc định là 'user'
+          String role = (userDoc.data() as Map<String, dynamic>)['role'] ?? 'user';
+
+          if (role == 'admin') {
+            // NẾU LÀ ADMIN
+            context.go('/admin');
+          } else {
+            // NẾU LÀ USER
+            context.go('/home'); // Hoặc '/' tùy vào route mặc định của bạn
+          }
+        } else {
+          // Trường hợp đăng nhập thành công nhưng chưa có data trong Firestore
+          // Chuyển về trang chủ mặc định
+          context.go('/home');
+        }
+      }
+    } catch (e) {
+      _showMsg("Lỗi kiểm tra quyền: $e", isError: true);
+    }
+  }
   // Xử lý đăng nhập Email/Pass
   Future<void> _handleLogin() async {
     if (_emailCtrl.text.isEmpty || _passCtrl.text.isEmpty) {
@@ -28,11 +57,13 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     setState(() => _isLoading = true);
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailCtrl.text.trim(),
         password: _passCtrl.text.trim(),
       );
-      if (mounted) context.go('/');
+      if (userCredential.user != null) {
+        await _checkRoleAndRedirect(userCredential.user!);
+      }
     } on FirebaseAuthException catch (e) {
       String msg = "Đăng nhập thất bại";
       if (e.code == 'user-not-found') msg = "Tài khoản không tồn tại";
@@ -64,8 +95,12 @@ class _LoginScreenState extends State<LoginScreen> {
         idToken: googleAuth.idToken,
       );
 
-      await FirebaseAuth.instance.signInWithCredential(credential);
-      if (mounted) context.go('/');
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+      if (userCredential.user != null) {
+        // Lưu ý: Với Google Login lần đầu, bạn có thể cần tạo document user trong Firestore nếu chưa có
+        // Ở đây tôi chỉ check role để điều hướng
+        await _checkRoleAndRedirect(userCredential.user!);
+      }
     } catch (e) {
       _showMsg("Lỗi Google Login: $e", isError: true);
     } finally {

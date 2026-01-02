@@ -6,7 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../model/product_model.dart';
 import '../service/Product_Service.dart';
-
+import '../service/sync_service.dart';
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -37,13 +37,17 @@ class _HomeScreenState extends State<HomeScreen> {
     _startBannerAutoPlay();
     _featuredProductsFuture = ProductService.fetchProducts();
     _loadSuggestions();
+    SyncService.syncPendingOrders();
   }
   void _loadSuggestions() async {
     // Lấy tất cả sản phẩm về chỉ để lấy tên
     var products = await ProductService.fetchProducts();
-    setState(() {
-      _productSuggestions = products.map((e) => e.title).toSet().toList(); // toSet để loại bỏ tên trùng
-    });
+    if (mounted) {
+      setState(() {
+        _productSuggestions = products.map((e) => e.title).toSet().toList();
+      });
+    }
+
   }
   void _startBannerAutoPlay() {
     _bannerTimer = Timer.periodic(const Duration(seconds: 5), (timer) {

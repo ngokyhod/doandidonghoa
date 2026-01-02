@@ -17,7 +17,7 @@ import 'screen/product_list_screen.dart'; // Import trang sản phẩm
 import 'screen/chatbot_screen.dart'; // Nếu có
 import 'screen/admin_chat_screen.dart'; // Nếu có
 import 'screen/profile_screen.dart';
-
+import 'package:doandidonghoa/Admin/admin_main_screen.dart';
 // --- Global Keys ---
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -53,7 +53,10 @@ final _router = GoRouter(
 
         // 2. Thu gom (Hoặc Chatbot tùy bạn sắp xếp)
         GoRoute(path: '/create_scrap_collection_request', builder: (context, state) => const CreateScrapCollectionRequestScreen()),
-
+        GoRoute(
+          path: '/admin',
+          builder: (context, state) => const AdminMainScreen(),
+        ),
         // 3. Quét phụ phẩm (Nút Giữa)
         GoRoute(path: '/create_scrap_collection_request', builder: (context, state) => const CreateScrapCollectionRequestScreen()),
         GoRoute(

@@ -2,109 +2,115 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
-import '../model/cart_item_model.dart'; // Import model giỏ hàng
+import '../model/cart_item_model.dart';
 
 class CheckoutService {
 
-  // 1. Cấu hình Base URL (Tái sử dụng logic cũ)
   static String get baseUrl {
     if (kIsWeb) {
       return 'https://localhost:7240/api/MobileApi';
     } else {
-      // ANDROID EMULATOR DÙNG 10.0.2.2
-      // MÁY THẬT DÙNG IP LAN (VD: 192.168.1.X)
       return 'http://10.0.2.2:5056/api/MobileApi';
     }
   }
 
-  // 2. Hàm xử lý Checkout (Gọi cả Firebase và SQL)
   static Future<bool> createOrder({
     required String uid,
     required String hoTen,
     required String sdt,
     required String diaChi,
     required String ghiChu,
-    required String phuongThucThanhToan, // Mã phương thức (PT001, PT005...)
+    required String phuongThucThanhToan,
     required double tongTien,
     required List<CartItem> cartItems,
   }) async {
 
-    // --- CHUẨN BỊ DỮ LIỆU ---
-    // Tạo mã đơn hàng trên App hoặc để Server tự sinh (Ở đây để Server sinh cho chuẩn)
-    final now = DateTime.now();
-
-    // Map danh sách sản phẩm sang định dạng JSON đơn giản
-    final List<Map<String, dynamic>> chiTietDonHang = cartItems.map((item) => {
-      'productId': item.productId,
-      'productName': item.title,
-      'quantity': item.weight, // Trong hệ thống của bạn: số lượng = khối lượng (kg)
-      'price': item.price,
-      'imageUrl': item.imageUrl,
-    }).toList();
-
-    // Dữ liệu dùng cho Firebase (Hiển thị App)
-    final firebaseData = {
-      'uid': uid,
-      'ngayDat': FieldValue.serverTimestamp(),
-      'trangThai': 'Chờ xử lý',
-      'trangThaiThanhToan': 'Chưa thanh toán',
-      'tenNguoiNhan': hoTen,
-      'sdtNguoiNhan': sdt,
-      'diaChiGiaoHang': diaChi,
-      'ghiChu': ghiChu,
-      'phuongThucTT': phuongThucThanhToan, // Lưu mã hoặc tên đều được
-      'tongTien': tongTien,
-      'items': chiTietDonHang, // Lưu mảng sản phẩm vào document
-    };
-
-    // Dữ liệu dùng cho SQL Server (Khớp với DonHangDto bên C#)
-    final sqlData = {
-      'UserId': uid, // Firebase UID để tìm KhachHang
-      'Tendathang': hoTen,
-      'SoDienThoaidathang': sdt,
-      'ShippingAddress': diaChi,
-      'Notes': ghiChu,
-      'M_PhuongThuc': phuongThucThanhToan, // Bắt buộc phải là mã (PT001...)
-      'TongTien': tongTien,
-      'NgayDat': now.toIso8601String(),
-
-      // Danh sách chi tiết để lưu vào bảng ChiTietDatHang
-      'ChiTietDonHangs': cartItems.map((item) => {
-        'M_SanPham': item.productId,
-        'TenSanPham': item.title,
-        'SoLuong': item.weight, // Map vào cột SoLuong hoặc KhoiLuong tùy DB
-        'DonGia': item.price
+    // 1. Chuẩn bị dữ liệu SQL (Cho dù có gửi được hay không cũng cần chuẩn bị format này)
+    final Map<String, dynamic> sqlData = {
+      "UserId": uid,
+      "Tendathang": hoTen,
+      "SoDienThoaidathang": sdt,
+      "ShippingAddress": diaChi,
+      "Notes": ghiChu,
+      "M_PhuongThuc": phuongThucThanhToan,
+      "TongTien": tongTien,
+      "NgayDat": DateTime.now().toIso8601String(),
+      "ChiTietDonHangs": cartItems.map((item) {
+        return {
+          "M_SanPham": item.productId,
+          "TenSanPham": item.title,
+          "SoLuong": item.weight,
+          "DonGia": item.price
+        };
       }).toList()
     };
 
+    // 2. Chuẩn bị dữ liệu Firebase
+    final Map<String, dynamic> firebaseData = {
+      'uid': uid,
+      'maDonHang': 'PENDING', // Tạm thời chưa có mã từ SQL
+      'ngayDat': FieldValue.serverTimestamp(),
+      'trangThai': 'Chờ đồng bộ', // Trạng thái tạm
+      'trangThaiThanhToan': 'Chưa thanh toán',
+      'tongTien': tongTien,
+      'nguoiNhan': {
+        'ten': hoTen,
+        'sdt': sdt,
+        'diaChi': diaChi
+      },
+      'items': cartItems.map((item) => {
+        'ten': item.title,
+        'anh': item.imageUrl,
+        'gia': item.price,
+        'soLuong': item.weight,
+        'productId': item.productId // Lưu lại ID để sau này sync
+      }).toList(),
+
+      // --- CỜ QUAN TRỌNG ---
+      'isSync': false, // Mặc định là chưa đồng bộ
+      'sqlPayload': jsonEncode(sqlData) // LƯU LUÔN GÓI TIN CẦN GỬI API VÀO FIREBASE ĐỂ DÙNG LẠI SAU
+    };
+
     try {
-      // --- BƯỚC 1: LƯU FIREBASE ---
-      await FirebaseFirestore.instance.collection('DonHang').add(firebaseData);
-      print("✅ Đã lưu đơn hàng lên Firebase");
+      print("🚀 Đang thử gửi đơn hàng tới SQL...");
 
-      // --- BƯỚC 2: GỬI SQL SERVER ---
-      final url = Uri.parse('$baseUrl/tao-don-hang');
-      print("🚀 Đang gửi đơn hàng tới SQL: $url");
-
+      // BƯỚC A: Thử gọi API SQL
       final response = await http.post(
-        url,
+        Uri.parse('$baseUrl/tao-don-hang'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(sqlData),
-      );
+      ).timeout(const Duration(seconds: 10)); // Timeout 10s để không đợi lâu
 
-      print("📩 Server phản hồi: ${response.statusCode} - ${response.body}");
+      if (response.statusCode == 200) {
+        // --- TRƯỜNG HỢP 1: API THÀNH CÔNG (Lý tưởng) ---
+        final responseData = jsonDecode(response.body);
+        String maDonHangSQL = responseData['maDonHang'] ?? "DH_Unknown";
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        print("✅ Gửi SQL thành công!");
+        // Cập nhật dữ liệu Firebase thành chuẩn
+        firebaseData['isSync'] = true;
+        firebaseData['maDonHang'] = maDonHangSQL;
+        firebaseData['trangThai'] = 'Chờ xác nhận';
+        // Xóa payload đi cho nhẹ db vì đã sync xong
+        firebaseData.remove('sqlPayload');
+
+        await FirebaseFirestore.instance.collection('DonHang').add(firebaseData);
+        print("✅ Đã lưu SQL & Firebase (Sync: True)");
         return true;
       } else {
-        print("❌ Lỗi Server SQL: ${response.body}");
-        // Có thể bạn muốn xóa đơn trên Firebase nếu SQL lỗi? (Tùy logic)
-        return false;
+        // --- TRƯỜNG HỢP 2: API LỖI (Server 500, 400...) ---
+        print("⚠️ API Lỗi ${response.statusCode}. Chuyển sang lưu Offline.");
+        throw Exception("API Error"); // Ném lỗi để nhảy xuống catch
       }
     } catch (e) {
-      print("❌ Lỗi kết nối CheckoutService: $e");
-      return false;
+      // --- TRƯỜNG HỢP 3: MẤT MẠNG HOẶC SERVER CHẾT ---
+      print("⚠️ Không kết nối được SQL: $e. Đang lưu tạm vào Firebase...");
+
+      // Vẫn lưu vào Firebase nhưng isSync = false
+      // Giữ nguyên 'sqlPayload' để service đồng bộ sau này dùng
+      await FirebaseFirestore.instance.collection('DonHang').add(firebaseData);
+
+      print("✅ Đã lưu Firebase (Sync: False) - Sẽ đồng bộ lại sau.");
+      return true; // Vẫn trả về true để App báo "Đặt hàng thành công" cho khách vui
     }
   }
 }

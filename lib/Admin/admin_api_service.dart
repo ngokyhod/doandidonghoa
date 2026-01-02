@@ -2,12 +2,40 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 
+import '../service/ApiService.dart';
+
 class AdminApiService {
   static String get baseUrl {
     if (kIsWeb) return 'https://localhost:7240/api/AdminApi';
     return 'http://10.0.2.2:7240/api/AdminApi';
   }
+  static Future<bool> syncAllProducts() async {
+    try {
+      // API này nằm bên MobileApiController mà bạn đã viết trong Visual Studio
+      final url = Uri.parse('${ApiService.baseUrl}/sync-products');
 
+      print("🔄 Đang gửi lệnh đồng bộ tới: $url");
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          // Nếu cần token admin thì thêm vào đây: 'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        print("✅ Đồng bộ thành công: ${response.body}");
+        return true;
+      } else {
+        print("❌ Lỗi Server: ${response.statusCode} - ${response.body}");
+        return false;
+      }
+    } catch (e) {
+      print("❌ Lỗi kết nối: $e");
+      return false;
+    }
+  }
   // 1. Dashboard tổng quan
   static Future<Map<String, dynamic>?> getDashboard() async {
     try {
