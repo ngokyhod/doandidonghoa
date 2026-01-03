@@ -89,10 +89,8 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
   }
 
   Future<void> _handleSubmit() async {
-    // 1. Validate Form
     if (!_formKey.currentState!.validate()) return;
 
-    // 2. Validate Đăng nhập
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       _showLoginDialog();
@@ -102,89 +100,49 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
     setState(() => _isSubmitting = true);
 
     try {
-      // Chuẩn bị dữ liệu hiển thị (Tên) và dữ liệu xử lý (Mã)
-      String fullAddressStr = "${_addressController.text}, ${_selectedWardModel?.name}, ${_selectedDistrictModel?.name}, ${_selectedCityModel?.name}";
-
-      // --- BƯỚC 3: GỬI FIREBASE (Lưu để hiển thị trên App) ---
-      final requestData = {
-        'uid': user.uid,
-        'email': user.email ?? "",
-        'contactName': _nameController.text.trim(),
-        'contactPhone': _phoneController.text.trim(),
-
-        // Lưu cả Mã và Tên lên Firebase cho tiện
-        'maTinh': _selectedCityModel?.code ?? "",
-        'tenTinh': _selectedCityModel?.name ?? "",
-        'maQuan': _selectedDistrictModel?.code ?? "",
-        'tenQuan': _selectedDistrictModel?.name ?? "",
-        'maXa': _selectedWardModel?.code ?? "",
-        'tenXa': _selectedWardModel?.name ?? "",
-
-        'diaChiCuThe': _addressController.text.trim(),
-        'fullAddress': fullAddressStr,
-
-        'category': _selectedCategory,
-        'productName': _selectedProduct?.title ?? "Chưa chọn",
-        'productId': _selectedProduct?.id ?? "",
-
-        'amount': double.tryParse(_weightController.text) ?? 0,
-        'giaTriMongMuon': double.tryParse(_priceController.text) ?? 0,
-        'moTa': _noteController.text.trim(),
-        'doAm': _moistureValue,
-        'trangThaiXuLy': 'MoiYeuCau',
-        'createdAt': FieldValue.serverTimestamp(),
-      };
-
-      await FirebaseFirestore.instance.collection('ThuGom').add(requestData);
-      print("✅ Đã lưu Firebase");
-
-      // --- BƯỚC 4: GỬI SQL SERVER (Dùng ThuGomService mới) ---
-      bool sqlSuccess = await ThuGomService.createThuGomRequest(
+      // GỌI DUY NHẤT HÀM NÀY: Nó sẽ tự lo việc lưu Firestore (có isSync) và push SQL
+      bool success = await ThuGomService.createThuGomRequest(
         uid: user.uid,
-        hoTen: _nameController.text,
-        sdt: _phoneController.text,
-        diaChiCuThe: _addressController.text,
+        hoTen: _nameController.text.trim(),
+        sdt: _phoneController.text.trim(),
+        diaChiCuThe: _addressController.text.trim(),
 
-        // QUAN TRỌNG: Gửi CODE (T01, Q001...) sang SQL
         maTinh: _selectedCityModel?.code ?? "",
         maQuan: _selectedDistrictModel?.code ?? "",
         maXa: _selectedWardModel?.code ?? "",
 
         tenSP: _selectedProduct?.title ?? "",
         loaiSP: _selectedCategory ?? "",
+        productId: _selectedProduct?.id ?? "", // Truyền thêm ID sản phẩm
+
         khoiLuong: double.tryParse(_weightController.text) ?? 0,
         giaMongMuon: double.tryParse(_priceController.text) ?? 0,
         doAm: _moistureValue,
-        ghiChu: _noteController.text,
-
-        hinhAnh: [], // Gửi mảng rỗng để tránh lỗi API
-        thoiGianSanSang: DateTime.now(), // Mặc định là ngay bây giờ
+        ghiChu: _noteController.text.trim(),
       );
 
       if (mounted) {
-        if (sqlSuccess) {
+        if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("✅ Gửi yêu cầu thành công!"), backgroundColor: Colors.green),
+            const SnackBar(content: Text("✅ Đã gửi yêu cầu thu gom!"), backgroundColor: Colors.green),
           );
-          context.pop();
+          context.go('/');
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("⚠️ Đã lưu App nhưng lỗi đồng bộ Server."), backgroundColor: Colors.orange),
+            const SnackBar(content: Text("❌ Gửi yêu cầu thất bại."), backgroundColor: Colors.red),
           );
-          context.pop(); // Vẫn cho thoát vì Firebase đã nhận
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("❌ Lỗi: $e"), backgroundColor: Colors.red),
+          SnackBar(content: Text("❌ Lỗi hệ thống: $e"), backgroundColor: Colors.red),
         );
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
-
   void _showLoginDialog() {
     showDialog(
       context: context,

@@ -35,6 +35,11 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadSuggestions();
     SyncService.syncPendingOrders();
   }
+  Future<void> _refreshData() async {
+    setState(() {
+      _featuredProductsFuture = ProductService.fetchProducts();
+    });
+  }
   void _loadSuggestions() async {
     // Lấy tất cả sản phẩm về chỉ để lấy tên
     var products = await ProductService.fetchProducts();
@@ -102,6 +107,9 @@ void _startBannerAutoPlay() {
     return Scaffold(
       backgroundColor: const Color(0xFFF9FBE7), // Màu nền xanh cốm nhạt
       body: SafeArea(
+        child: RefreshIndicator( // <--- Bọc cái này ngoài SingleChildScrollView
+          onRefresh: _refreshData, // Gọi hàm reload khi kéo xuống
+          color: Colors.green,
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -136,6 +144,7 @@ void _startBannerAutoPlay() {
               const SizedBox(height: 40),
             ],
           ),
+        ),
         ),
       ),
     );

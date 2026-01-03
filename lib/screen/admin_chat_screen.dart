@@ -20,12 +20,10 @@ class _AdminChatScreenState extends State<AdminChatScreen> {
   Widget build(BuildContext context) {
     if (_currentUser == null) return const Scaffold(body: Center(child: Text("Vui lòng đăng nhập")));
 
-    // Sử dụng Consumer bọc bên trong build để tránh lỗi TypeError trên Web
     return Consumer(
       builder: (context, ref, child) {
         final isAdmin = _currentUser?.email?.toLowerCase() == 'phanthuky12@gmail.com';
 
-        // Admin: lấy UID từ Provider. Khách: lấy UID của chính mình
         final String? targetUserId = isAdmin
             ? ref.watch(selectedChatUserProvider)
             : _currentUser?.uid;
@@ -52,7 +50,7 @@ class _AdminChatScreenState extends State<AdminChatScreen> {
             ),
             leading: isAdmin ? IconButton(
               icon: const Icon(Icons.arrow_back),
-              onPressed: () => ref.read(adminTabProvider.notifier).setTab(4), // Quay lại danh sách
+              onPressed: () => ref.read(adminTabProvider.notifier).setTab(4),
             ) : null,
             backgroundColor: Colors.green.shade700,
             foregroundColor: Colors.white,
@@ -60,6 +58,7 @@ class _AdminChatScreenState extends State<AdminChatScreen> {
           body: Column(
             children: [
               Expanded(child: _buildMessageList(targetUserId)),
+              // Truyền isAdmin để xử lý logic gửi tin
               _buildInputArea(targetUserId, isAdmin),
             ],
           ),
@@ -80,15 +79,20 @@ class _AdminChatScreenState extends State<AdminChatScreen> {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final messages = snapshot.data!.docs;
 
+        // Tự động cuộn xuống cuối khi có tin nhắn mới
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_scrollController.hasClients) {
-            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
           }
         });
 
         return ListView.builder(
           controller: _scrollController,
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.only(top: 16, bottom: 16, left: 16, right: 16), // Padding chung
           itemCount: messages.length,
           itemBuilder: (context, index) {
             final data = messages[index].data() as Map<String, dynamic>;
@@ -106,9 +110,15 @@ class _AdminChatScreenState extends State<AdminChatScreen> {
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75), // Giới hạn chiều rộng tin nhắn
         decoration: BoxDecoration(
           color: isMe ? Colors.green.shade600 : Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: isMe ? const Radius.circular(16) : const Radius.circular(0),
+            bottomRight: isMe ? const Radius.circular(0) : const Radius.circular(16),
+          ),
           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2)],
         ),
         child: Text(text, style: TextStyle(color: isMe ? Colors.white : Colors.black87)),
@@ -118,27 +128,53 @@ class _AdminChatScreenState extends State<AdminChatScreen> {
 
   Widget _buildInputArea(String roomId, bool isAdmin) {
     return Container(
-      padding: const EdgeInsets.all(12),
-      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.2),
+            spreadRadius: 1,
+            blurRadius: 5,
+            offset: const Offset(0, -3),
+          ),
+        ],
+      ),
       child: SafeArea(
         child: Row(
           children: [
             Expanded(
               child: TextField(
                 controller: _controller,
+                textInputAction: TextInputAction.send, // Hiển thị nút Gửi trên bàn phím
+                onSubmitted: (_) => _sendMessage(roomId, isAdmin), // Nhấn Enter là gửi
                 decoration: InputDecoration(
                   hintText: 'Nhập tin nhắn...',
                   filled: true,
                   fillColor: Colors.grey.shade100,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(25), borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
                 ),
               ),
             ),
             const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.send, color: Colors.green),
-              onPressed: () => _sendMessage(roomId, isAdmin),
+
+            // Nút gửi tin nhắn
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.green.shade600,
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                onPressed: () => _sendMessage(roomId, isAdmin),
+              ),
             ),
+
+            // --- QUAN TRỌNG: KHOẢNG TRỐNG ĐỂ TRÁNH NÚT CHATBOT ---
+            // Nếu bạn có nút Chatbot ở góc phải dưới, đoạn này sẽ đẩy vùng nhập liệu sang trái
+            // để nút Gửi không bị che.
+            const SizedBox(width: 70), // Khoảng 70px cho nút Chatbot của AppShell
           ],
         ),
       ),
@@ -150,18 +186,23 @@ class _AdminChatScreenState extends State<AdminChatScreen> {
     if (text.isEmpty) return;
     _controller.clear();
 
-    // 1. Gửi tin nhắn vào messages
-    await FirebaseFirestore.instance.collection('chat_rooms').doc(roomId).collection('messages').add({
-      'text': text,
-      'senderId': _currentUser?.uid,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
+    try {
+      // 1. Gửi tin nhắn vào messages
+      await FirebaseFirestore.instance.collection('chat_rooms').doc(roomId).collection('messages').add({
+        'text': text,
+        'senderId': _currentUser?.uid,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
 
-    // 2. Cập nhật phòng chat và BẬT CHUÔNG CHO ADMIN (nếu khách gửi)
-    await FirebaseFirestore.instance.collection('chat_rooms').doc(roomId).set({
-      'lastMessage': text,
-      'lastMessageTime': FieldValue.serverTimestamp(),
-      'unreadByAdmin': !isAdmin, // Khách gửi -> true (Chuông reo), Admin gửi -> false (Chuông tắt)
-    }, SetOptions(merge: true));
+      // 2. Cập nhật phòng chat
+      await FirebaseFirestore.instance.collection('chat_rooms').doc(roomId).set({
+        'lastMessage': text,
+        'lastMessageTime': FieldValue.serverTimestamp(),
+        'unreadByAdmin': !isAdmin,
+      }, SetOptions(merge: true));
+    } catch (e) {
+      // Xử lý lỗi nếu cần
+      print("Lỗi gửi tin nhắn: $e");
+    }
   }
 }
