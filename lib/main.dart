@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'Admin/admin_xnk_screen.dart';
+import 'Admin/owner_dashboard_screen.dart';
 import 'firebase_options.dart';
 import 'app_shell.dart'; // Import file AppShell
 import 'screen/home_screen.dart';
@@ -77,6 +79,9 @@ final _router = GoRouter(
 
         // 5. Cá nhân
         GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
+        GoRoute(path: '/admin_xnk', builder: (context, state) => const AdminXNKScreen()),
+        GoRoute(path: '/owner_dashboard', builder: (context, state) => const OwnerDashboardScreen()),
+        GoRoute(path: '/admin_chat', builder: (context, state) => const AdminChatScreen()),
       ],
     ),
     GoRoute(

@@ -25,11 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- MỚI: Danh sách tên sản phẩm để gợi ý ---
   List<String> _productSuggestions = [];
-  final List<String> _bannerImageUrls = [
-    'assets/images/Banner/banner1.png',
-    'assets/images/Banner/banner2.png',
-    'assets/images/Banner/banner3.png',
-  ];
+  List<String> _bannerImageUrls = [];
 
   @override
   void initState() {
@@ -45,23 +41,41 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) {
       setState(() {
         _productSuggestions = products.map((e) => e.title).toSet().toList();
+        if (products.isNotEmpty) {
+          _bannerImageUrls = products
+              .where((p) => p.imageUrls.isNotEmpty)
+              .take(3)
+              .map((p) => p.imageUrls.first)
+              .toList();
+        }
+        if (_bannerImageUrls.isEmpty) {
+          _bannerImageUrls = [
+            'https://picsum.photos/800/400?sig=1',
+            'https://picsum.photos/800/400?sig=2',
+            'https://picsum.photos/800/400?sig=3',
+          ];
+        }
+        _startBannerAutoPlay();
       });
-    }
 
-  }
-  void _startBannerAutoPlay() {
-    _bannerTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (_bannerController.hasClients) {
-        int nextPageIndex = (_currentBannerIndex + 1) % _bannerImageUrls.length;
-        _bannerController.animateToPage(
-          nextPageIndex,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeInOut,
-        );
       }
-    });
   }
 
+
+
+void _startBannerAutoPlay() {
+  _bannerTimer?.cancel();
+  _bannerTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    if (_bannerController.hasClients && _bannerImageUrls.isNotEmpty) {
+      int nextPageIndex = (_currentBannerIndex + 1) % _bannerImageUrls.length;
+      _bannerController.animateToPage(
+        nextPageIndex,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
+    }
+  });
+}
   @override
   void dispose() {
 

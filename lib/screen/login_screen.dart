@@ -37,7 +37,7 @@ class _LoginScreenState extends State<LoginScreen> {
             context.go('/admin');
           } else {
             // NẾU LÀ USER
-            context.go('/home'); // Hoặc '/' tùy vào route mặc định của bạn
+            context.go('/'); // Hoặc '/' tùy vào route mặc định của bạn
           }
         } else {
           // Trường hợp đăng nhập thành công nhưng chưa có data trong Firestore

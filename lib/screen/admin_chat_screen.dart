@@ -1,5 +1,8 @@
-
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../Admin/admin_tab_provider.dart';
 
 class AdminChatScreen extends StatefulWidget {
   const AdminChatScreen({super.key});
@@ -9,100 +12,156 @@ class AdminChatScreen extends StatefulWidget {
 }
 
 class _AdminChatScreenState extends State<AdminChatScreen> {
-  final TextEditingController _messageController = TextEditingController();
-  // Dummy list of messages for UI purposes
-  final List<Map<String, dynamic>> _messages = [
-    {'sender': 'admin', 'text': 'Xin chào! Tôi có thể giúp gì cho bạn?'},
-    {'sender': 'user', 'text': 'Tôi cần hỗ trợ về đơn hàng của mình.'},
-    {'sender': 'admin', 'text': 'Vui lòng cung cấp mã đơn hàng của bạn.'},
-  ];
-
-  void _sendMessage() {
-    if (_messageController.text.isNotEmpty) {
-      // In a real app, you would send this to your backend/Firebase
-      setState(() {
-        _messages.add({'sender': 'user', 'text': _messageController.text});
-        _messageController.clear();
-      });
-      // Simulate a reply from the admin
-      Future.delayed(const Duration(seconds: 1), () {
-        setState(() {
-          _messages.add({'sender': 'admin', 'text': 'Cảm ơn bạn. Chúng tôi đang kiểm tra...'});
-        });
-      });
-    }
-  }
+  final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final _currentUser = FirebaseAuth.instance.currentUser;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Hỗ trợ khách hàng'),
-        backgroundColor: theme.primaryColor,
-        foregroundColor: Colors.white,
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16.0),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                final bool isUserMessage = message['sender'] == 'user';
-                return Align(
-                  alignment: isUserMessage ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 4.0),
-                    padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
-                    decoration: BoxDecoration(
-                      color: isUserMessage ? theme.primaryColor : Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(20.0),
-                    ),
-                    child: Text(
-                      message['text'],
-                      style: TextStyle(color: isUserMessage ? Colors.white : Colors.black),
-                    ),
-                  ),
+    if (_currentUser == null) return const Scaffold(body: Center(child: Text("Vui lòng đăng nhập")));
+
+    // Sử dụng Consumer bọc bên trong build để tránh lỗi TypeError trên Web
+    return Consumer(
+      builder: (context, ref, child) {
+        final isAdmin = _currentUser?.email?.toLowerCase() == 'phanthuky12@gmail.com';
+
+        // Admin: lấy UID từ Provider. Khách: lấy UID của chính mình
+        final String? targetUserId = isAdmin
+            ? ref.watch(selectedChatUserProvider)
+            : _currentUser?.uid;
+
+        if (targetUserId == null) {
+          return const Scaffold(body: Center(child: Text("Vui lòng chọn một khách hàng để hỗ trợ")));
+        }
+
+        return Scaffold(
+          backgroundColor: const Color(0xFFF5F6F9),
+          appBar: AppBar(
+            title: StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance.collection('users').doc(targetUserId).snapshots(),
+              builder: (context, snapshot) {
+                final name = (snapshot.data?.data() as Map?)?['fullName'] ?? 'Đang tải...';
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Text('Hỗ trợ trực tuyến', style: TextStyle(fontSize: 11, color: Colors.white70)),
+                  ],
                 );
               },
             ),
+            leading: isAdmin ? IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => ref.read(adminTabProvider.notifier).setTab(4), // Quay lại danh sách
+            ) : null,
+            backgroundColor: Colors.green.shade700,
+            foregroundColor: Colors.white,
           ),
-          _buildMessageComposer(theme),
-        ],
+          body: Column(
+            children: [
+              Expanded(child: _buildMessageList(targetUserId)),
+              _buildInputArea(targetUserId, isAdmin),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMessageList(String roomId) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('chat_rooms')
+          .doc(roomId)
+          .collection('messages')
+          .orderBy('timestamp', descending: false)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final messages = snapshot.data!.docs;
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+          }
+        });
+
+        return ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.all(16),
+          itemCount: messages.length,
+          itemBuilder: (context, index) {
+            final data = messages[index].data() as Map<String, dynamic>;
+            final isMe = data['senderId'] == _currentUser?.uid;
+            return _buildMessageBubble(data['text'] ?? '', isMe);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildMessageBubble(String text, bool isMe) {
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        decoration: BoxDecoration(
+          color: isMe ? Colors.green.shade600 : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2)],
+        ),
+        child: Text(text, style: TextStyle(color: isMe ? Colors.white : Colors.black87)),
       ),
     );
   }
 
-  Widget _buildMessageComposer(ThemeData theme) {
+  Widget _buildInputArea(String roomId, bool isAdmin) {
     return Container(
-      padding: const EdgeInsets.all(8.0),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        boxShadow: const [
-          BoxShadow(offset: Offset(0, -1), blurRadius: 4, color: Colors.black12)
-        ],
-      ),
+      padding: const EdgeInsets.all(12),
+      color: Colors.white,
       child: SafeArea(
         child: Row(
           children: [
             Expanded(
               child: TextField(
-                controller: _messageController,
-                decoration: const InputDecoration.collapsed(
+                controller: _controller,
+                decoration: InputDecoration(
                   hintText: 'Nhập tin nhắn...',
+                  filled: true,
+                  fillColor: Colors.grey.shade100,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(25), borderSide: BorderSide.none),
                 ),
-                textCapitalization: TextCapitalization.sentences,
               ),
             ),
+            const SizedBox(width: 8),
             IconButton(
-              icon: Icon(Icons.send, color: theme.primaryColor),
-              onPressed: _sendMessage,
+              icon: const Icon(Icons.send, color: Colors.green),
+              onPressed: () => _sendMessage(roomId, isAdmin),
             ),
           ],
         ),
       ),
     );
+  }
+
+  void _sendMessage(String roomId, bool isAdmin) async {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    _controller.clear();
+
+    // 1. Gửi tin nhắn vào messages
+    await FirebaseFirestore.instance.collection('chat_rooms').doc(roomId).collection('messages').add({
+      'text': text,
+      'senderId': _currentUser?.uid,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    // 2. Cập nhật phòng chat và BẬT CHUÔNG CHO ADMIN (nếu khách gửi)
+    await FirebaseFirestore.instance.collection('chat_rooms').doc(roomId).set({
+      'lastMessage': text,
+      'lastMessageTime': FieldValue.serverTimestamp(),
+      'unreadByAdmin': !isAdmin, // Khách gửi -> true (Chuông reo), Admin gửi -> false (Chuông tắt)
+    }, SetOptions(merge: true));
   }
 }
