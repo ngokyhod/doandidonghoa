@@ -558,8 +558,8 @@ as List<String>,
 /// @nodoc
 mixin _$Product {
 
- String get id; String get title; double get price; String get unit; List<String> get imageUrls; String get description; Map<String, String> get specifications; List<ProductVariant> get variants; int get stockQuantity; String get category; String get sellerName; String get sellerId;// Thêm danh sách đánh giá vào đây
- List<Review> get reviews;
+ String get id; String get title; double get price; String get unit; List<String> get imageUrls; String get description; Map<String, String> get specifications; List<ProductVariant> get variants; double get stockQuantity;// Đã đổi thành double để khớp với logic
+ String get category; String get sellerName; String get sellerId; List<Review> get reviews;
 /// Create a copy of Product
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -590,7 +590,7 @@ abstract mixin class $ProductCopyWith<$Res>  {
   factory $ProductCopyWith(Product value, $Res Function(Product) _then) = _$ProductCopyWithImpl;
 @useResult
 $Res call({
- String id, String title, double price, String unit, List<String> imageUrls, String description, Map<String, String> specifications, List<ProductVariant> variants, int stockQuantity, String category, String sellerName, String sellerId, List<Review> reviews
+ String id, String title, double price, String unit, List<String> imageUrls, String description, Map<String, String> specifications, List<ProductVariant> variants, double stockQuantity, String category, String sellerName, String sellerId, List<Review> reviews
 });
 
 
@@ -618,7 +618,7 @@ as List<String>,description: null == description ? _self.description : descripti
 as String,specifications: null == specifications ? _self.specifications : specifications // ignore: cast_nullable_to_non_nullable
 as Map<String, String>,variants: null == variants ? _self.variants : variants // ignore: cast_nullable_to_non_nullable
 as List<ProductVariant>,stockQuantity: null == stockQuantity ? _self.stockQuantity : stockQuantity // ignore: cast_nullable_to_non_nullable
-as int,category: null == category ? _self.category : category // ignore: cast_nullable_to_non_nullable
+as double,category: null == category ? _self.category : category // ignore: cast_nullable_to_non_nullable
 as String,sellerName: null == sellerName ? _self.sellerName : sellerName // ignore: cast_nullable_to_non_nullable
 as String,sellerId: null == sellerId ? _self.sellerId : sellerId // ignore: cast_nullable_to_non_nullable
 as String,reviews: null == reviews ? _self.reviews : reviews // ignore: cast_nullable_to_non_nullable
@@ -707,7 +707,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String title,  double price,  String unit,  List<String> imageUrls,  String description,  Map<String, String> specifications,  List<ProductVariant> variants,  int stockQuantity,  String category,  String sellerName,  String sellerId,  List<Review> reviews)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String title,  double price,  String unit,  List<String> imageUrls,  String description,  Map<String, String> specifications,  List<ProductVariant> variants,  double stockQuantity,  String category,  String sellerName,  String sellerId,  List<Review> reviews)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Product() when $default != null:
 return $default(_that.id,_that.title,_that.price,_that.unit,_that.imageUrls,_that.description,_that.specifications,_that.variants,_that.stockQuantity,_that.category,_that.sellerName,_that.sellerId,_that.reviews);case _:
@@ -728,7 +728,7 @@ return $default(_that.id,_that.title,_that.price,_that.unit,_that.imageUrls,_tha
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String title,  double price,  String unit,  List<String> imageUrls,  String description,  Map<String, String> specifications,  List<ProductVariant> variants,  int stockQuantity,  String category,  String sellerName,  String sellerId,  List<Review> reviews)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String title,  double price,  String unit,  List<String> imageUrls,  String description,  Map<String, String> specifications,  List<ProductVariant> variants,  double stockQuantity,  String category,  String sellerName,  String sellerId,  List<Review> reviews)  $default,) {final _that = this;
 switch (_that) {
 case _Product():
 return $default(_that.id,_that.title,_that.price,_that.unit,_that.imageUrls,_that.description,_that.specifications,_that.variants,_that.stockQuantity,_that.category,_that.sellerName,_that.sellerId,_that.reviews);case _:
@@ -748,7 +748,7 @@ return $default(_that.id,_that.title,_that.price,_that.unit,_that.imageUrls,_tha
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String title,  double price,  String unit,  List<String> imageUrls,  String description,  Map<String, String> specifications,  List<ProductVariant> variants,  int stockQuantity,  String category,  String sellerName,  String sellerId,  List<Review> reviews)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String title,  double price,  String unit,  List<String> imageUrls,  String description,  Map<String, String> specifications,  List<ProductVariant> variants,  double stockQuantity,  String category,  String sellerName,  String sellerId,  List<Review> reviews)?  $default,) {final _that = this;
 switch (_that) {
 case _Product() when $default != null:
 return $default(_that.id,_that.title,_that.price,_that.unit,_that.imageUrls,_that.description,_that.specifications,_that.variants,_that.stockQuantity,_that.category,_that.sellerName,_that.sellerId,_that.reviews);case _:
@@ -763,7 +763,7 @@ return $default(_that.id,_that.title,_that.price,_that.unit,_that.imageUrls,_tha
 
 
 class _Product implements Product {
-  const _Product({required this.id, required this.title, required this.price, required this.unit, final  List<String> imageUrls = const [], this.description = '', final  Map<String, String> specifications = const {}, final  List<ProductVariant> variants = const [], this.stockQuantity = 0, this.category = '', this.sellerName = '', this.sellerId = '', final  List<Review> reviews = const []}): _imageUrls = imageUrls,_specifications = specifications,_variants = variants,_reviews = reviews;
+  const _Product({required this.id, required this.title, required this.price, required this.unit, final  List<String> imageUrls = const [], this.description = '', final  Map<String, String> specifications = const {}, final  List<ProductVariant> variants = const [], this.stockQuantity = 0.0, this.category = '', this.sellerName = '', this.sellerId = '', final  List<Review> reviews = const []}): _imageUrls = imageUrls,_specifications = specifications,_variants = variants,_reviews = reviews;
   
 
 @override final  String id;
@@ -792,13 +792,12 @@ class _Product implements Product {
   return EqualUnmodifiableListView(_variants);
 }
 
-@override@JsonKey() final  int stockQuantity;
+@override@JsonKey() final  double stockQuantity;
+// Đã đổi thành double để khớp với logic
 @override@JsonKey() final  String category;
 @override@JsonKey() final  String sellerName;
 @override@JsonKey() final  String sellerId;
-// Thêm danh sách đánh giá vào đây
  final  List<Review> _reviews;
-// Thêm danh sách đánh giá vào đây
 @override@JsonKey() List<Review> get reviews {
   if (_reviews is EqualUnmodifiableListView) return _reviews;
   // ignore: implicit_dynamic_type
@@ -836,7 +835,7 @@ abstract mixin class _$ProductCopyWith<$Res> implements $ProductCopyWith<$Res> {
   factory _$ProductCopyWith(_Product value, $Res Function(_Product) _then) = __$ProductCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String title, double price, String unit, List<String> imageUrls, String description, Map<String, String> specifications, List<ProductVariant> variants, int stockQuantity, String category, String sellerName, String sellerId, List<Review> reviews
+ String id, String title, double price, String unit, List<String> imageUrls, String description, Map<String, String> specifications, List<ProductVariant> variants, double stockQuantity, String category, String sellerName, String sellerId, List<Review> reviews
 });
 
 
@@ -864,7 +863,7 @@ as List<String>,description: null == description ? _self.description : descripti
 as String,specifications: null == specifications ? _self._specifications : specifications // ignore: cast_nullable_to_non_nullable
 as Map<String, String>,variants: null == variants ? _self._variants : variants // ignore: cast_nullable_to_non_nullable
 as List<ProductVariant>,stockQuantity: null == stockQuantity ? _self.stockQuantity : stockQuantity // ignore: cast_nullable_to_non_nullable
-as int,category: null == category ? _self.category : category // ignore: cast_nullable_to_non_nullable
+as double,category: null == category ? _self.category : category // ignore: cast_nullable_to_non_nullable
 as String,sellerName: null == sellerName ? _self.sellerName : sellerName // ignore: cast_nullable_to_non_nullable
 as String,sellerId: null == sellerId ? _self.sellerId : sellerId // ignore: cast_nullable_to_non_nullable
 as String,reviews: null == reviews ? _self._reviews : reviews // ignore: cast_nullable_to_non_nullable

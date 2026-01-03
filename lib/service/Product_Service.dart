@@ -47,7 +47,7 @@ class ProductService {
             category: jsonItem['tenLoai'] ?? '',
             unit: jsonItem['tenDVT'] ?? 'kg',
             description: jsonItem['moTa'] ?? '',
-            stockQuantity: 0, // API list thường chưa trả về tồn kho chi tiết
+            stockQuantity: (jsonItem['totalStock'] ?? 0).toDouble(),
           );
         }).toList();
 

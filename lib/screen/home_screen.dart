@@ -622,6 +622,7 @@ void _startBannerAutoPlay() {
 
   Widget _buildProductItem(Product product) {
     final formatCurrency = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ');
+    bool isOutOfStock = product.stockQuantity <= 0;
     return GestureDetector(
       onTap: () => context.push('/product/${product.id}', extra: product),
       child: Container(
@@ -633,28 +634,70 @@ void _startBannerAutoPlay() {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                child: product.imageUrls.isNotEmpty
-                    ? Image.network(
-                  product.imageUrls.first,
-                  width: double.infinity, fit: BoxFit.cover,
-                  errorBuilder: (_,__,___) => Container(color: Colors.grey[200]),
-                )
-                    : Container(color: Colors.green.withOpacity(0.1), child: const Center(child: Icon(Icons.grass, color: Colors.green))),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(product.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text(formatCurrency.format(product.price), style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                ],
-              ),
+        Expanded(
+        child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      child: product.imageUrls.isNotEmpty
+          ? Image.network(
+        product.imageUrls.first,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_,__,___) => Container(
+            color: Colors.grey[200],
+            child: const Center(child: Icon(Icons.image_not_supported))
+        ),
+      )
+          : Container(
+          color: Colors.green.withOpacity(0.1),
+          child: const Center(child: Icon(Icons.grass, color: Colors.green))
+      ),
+    ),
+    ),
+
+    // 2. Thông tin chi tiết
+    Padding(
+    padding: const EdgeInsets.all(8.0),
+    child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+    // Tên sản phẩm
+    Text(
+    product.title,
+    maxLines: 2,
+    overflow: TextOverflow.ellipsis,
+    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)
+    ),
+    const SizedBox(height: 4),
+
+    // Giá tiền
+    Text(
+    formatCurrency.format(product.price),
+    style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13)
+    ),
+
+    const SizedBox(height: 4),
+
+    // --- MỚI: HIỂN THỊ TỒN KHO ---
+    Row(
+    children: [
+    Icon(
+    Icons.inventory_2_outlined,
+    size: 12,
+    color: isOutOfStock ? Colors.red : Colors.grey[600]
+    ),
+    const SizedBox(width: 4),
+    Text(
+    isOutOfStock
+    ? "Hết hàng"
+        : "Kho: ${product.stockQuantity} ${product.unit}",
+    style: TextStyle(
+    fontSize: 11,
+    fontWeight: isOutOfStock ? FontWeight.bold : FontWeight.normal,
+    color: isOutOfStock ? Colors.red : Colors.grey[700],
+    ),
+    ),
+    ],
+    )   ]),
             ),
           ],
         ),

@@ -39,8 +39,6 @@ class Review with _$Review {
   String get userName => throw UnimplementedError();
 }
 
-
-
 // --- 2. Model Biến Thể (Variant) ---
 @freezed
 class ProductVariant with _$ProductVariant {
@@ -78,53 +76,50 @@ class Product with _$Product {
     @Default('') String description,
     @Default({}) Map<String, String> specifications,
     @Default([]) List<ProductVariant> variants,
-    @Default(0) int stockQuantity,
+    @Default(0.0) double stockQuantity, // Đã đổi sang double
     @Default('') String category,
     @Default('') String sellerName,
     @Default('') String sellerId,
-    // Thêm danh sách đánh giá vào đây
     @Default([]) List<Review> reviews,
   }) = _Product;
 
-  // 1. Dùng cho Firebase (Giữ nguyên, reviews mặc định rỗng nếu chưa có)
-  // Trong class Product
+  // 1. Dùng cho Firebase
   factory Product.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
 
-    // Xử lý ảnh: Vì C# gửi lên 1 chuỗi 'anhSanPham' nhưng App dùng List
-    String imgUrl = data['imageUrls'] ?? '';
-    // Nếu ảnh là đường dẫn tương đối từ SQL, Firebase cũng lưu y hệt
-    // Nhưng trong hàm fetchProducts ở trên tôi không xử lý lại ảnh cho Firebase
-    // vì lúc Sync C# tôi đã bảo bạn thêm domain vào rồi.
+    String imgUrl = data['imageUrls'] ?? data['anhSanPham'] ?? '';
 
     return Product(
-      id: data['id'] ?? doc.id,
-      title: data['title'] ?? 'Sản phẩm',
-      price: (data['price'] ?? 0).toDouble(),
+      id: data['id']?.toString() ?? data['m_SanPham']?.toString() ?? doc.id,
+      title: data['title'] ?? data['tenSanPham'] ?? 'Sản phẩm',
+      price: (data['price'] ?? data['gia'] ?? 0).toDouble(),
       imageUrls: imgUrl.isNotEmpty ? [imgUrl] : [],
-      category: data['category'] ?? '',
-      unit: data['unit'] ?? 'kg',
-      description: data['description'] ?? '',
-      stockQuantity: (data['stockQuantity'] ?? 0).toInt(), // Nếu có sync tồn kho
+      category: data['category'] ?? data['tenLoai'] ?? '',
+      unit: data['unit'] ?? data['tenDVT'] ?? 'kg',
+      description: data['description'] ?? data['moTa'] ?? '',
+      // Lấy từ nhiều nguồn key khác nhau để an toàn
+      stockQuantity: (data['stock'] ?? data['totalStock'] ?? data['stockQuantity'] ?? 0).toDouble(),
     );
   }
 
-  // 2. Dùng cho SQL - Mapping từ API C# (.NET)
+  // 2. Dùng cho SQL (API Visual Studio)
   factory Product.fromJson(Map<String, dynamic> json) {
     return Product(
       id: json['m_SanPham']?.toString() ?? json['id']?.toString() ?? '',
       title: json['tenSanPham'] ?? json['title'] ?? '',
       price: (json['gia'] ?? json['price'] ?? 0).toDouble(),
-      unit: json['donViTinh']?['tenDVT'] ?? 'kg',
-      // Xử lý ảnh: Nếu API trả về 1 ảnh string thì đưa vào List
+      unit: json['tenDVT'] ?? json['unit'] ?? 'kg',
+
       imageUrls: json['anhSanPham'] != null
           ? [json['anhSanPham']]
           : (json['imageUrls'] != null ? List<String>.from(json['imageUrls']) : []),
-      category: json['loaiSanPham']?['tenLoai'] ?? '',
-      description: json['moTa'] ?? '',
-      stockQuantity: (json['totalStock'] ?? 0).toInt(),
 
-      // --- Xử lý Mapping danh sách đánh giá từ API ---
+      category: json['tenLoai'] ?? json['category'] ?? '',
+      description: json['moTa'] ?? '',
+
+      // Map từ API và ép kiểu double
+      stockQuantity: (json['totalStock'] ?? json['stockQuantity'] ?? 0).toDouble(),
+
       reviews: (json['chiTietDanhGias'] as List<dynamic>?)
           ?.map((e) => Review(
         userName: e['tenKhachHang'] ?? e['userName'] ?? 'Ẩn danh',
@@ -174,7 +169,7 @@ class Product with _$Product {
 
   @override
   // TODO: implement stockQuantity
-  int get stockQuantity => throw UnimplementedError();
+  double get stockQuantity => throw UnimplementedError();
 
   @override
   // TODO: implement title
