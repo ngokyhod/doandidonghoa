@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../model/product_model.dart';
 import '../service/Product_Service.dart';
-// import 'edit_product_screen.dart'; // Import màn hình sửa nếu có
+import 'edit_product_screen.dart'; // Màn hình sửa
 
 class AdminProductScreen extends StatefulWidget {
   const AdminProductScreen({super.key});
@@ -52,78 +52,20 @@ class _AdminProductScreenState extends State<AdminProductScreen> {
     }
   }
 
-  // --- LOGIC XÓA SẢN PHẨM ---
-  void _confirmDelete(Product product) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Xác nhận xóa"),
-        content: Text("Bạn có chắc muốn xóa '${product.title}'?\n\nHành động này yêu cầu kết nối Server."),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Hủy")),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(ctx); // Đóng popup trước
-
-              // Gọi Service Xóa
-              _showLoading(true);
-              bool success = await ProductService.deleteProduct(product.id);
-              _showLoading(false);
-
-              if (success) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("✅ Đã xóa thành công!")));
-                _loadProducts(); // Tải lại danh sách
-              } else {
-                _showErrorDialog("Không thể xóa sản phẩm. \nNguyên nhân: Server Visual Studio đang tắt hoặc lỗi mạng.");
-              }
-            },
-            child: const Text("Xóa ngay"),
-          ),
-        ],
-      ),
-    );
-  }
-
   // --- LOGIC SỬA SẢN PHẨM ---
-  void _onEditPressed(Product product) {
-    // Chuyển sang màn hình sửa (Bạn tự tạo màn hình này và gọi ProductService.updateProduct khi Save)
-    // Ví dụ:
-    // Navigator.push(context, MaterialPageRoute(builder: (_) => EditProductScreen(product: product)));
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Tính năng Sửa đang phát triển (Yêu cầu Server Online)")),
+  void _onEditPressed(Product product) async {
+    // Chuyển sang màn hình sửa và đợi kết quả trả về
+    final bool? result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => EditProductScreen(product: product)),
     );
-  }
 
-  void _showErrorDialog(String msg) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Lỗi kết nối"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.cloud_off, size: 50, color: Colors.red),
-            const SizedBox(height: 10),
-            Text(msg, textAlign: TextAlign.center),
-          ],
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Đóng"))],
-      ),
-    );
-  }
-
-  void _showLoading(bool show) {
-    if (show) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator()),
+    // Nếu sửa thành công (trả về true) thì load lại danh sách để cập nhật text mới
+    if (result == true) {
+      _loadProducts();
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Cập nhật thông tin thành công!"))
       );
-    } else {
-      // Chỉ đóng nếu đang có dialog (hacky check)
-      if (Navigator.canPop(context)) Navigator.pop(context);
     }
   }
 
@@ -163,6 +105,7 @@ class _AdminProductScreenState extends State<AdminProductScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
+          // Logic thêm mới (giữ nguyên của bạn)
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Tính năng Thêm đang phát triển")));
         },
         backgroundColor: Colors.green,
@@ -206,16 +149,12 @@ class _AdminProductScreenState extends State<AdminProductScreen> {
                 ],
               ),
             ),
-            // --- NÚT SỬA ---
+            // --- CHỈ GIỮ LẠI NÚT SỬA ---
             IconButton(
               icon: const Icon(Icons.edit, color: Colors.blue),
               onPressed: () => _onEditPressed(product),
             ),
-            // --- NÚT XÓA ---
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => _confirmDelete(product), // Gọi hàm xác nhận xóa
-            ),
+            // Đã xóa nút thùng rác ở đây
           ],
         ),
       ),

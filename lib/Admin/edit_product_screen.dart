@@ -1,131 +1,133 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'admin_api_service.dart';
-import '../theme_notifier.dart';
+import 'package:flutter/services.dart';
+import '../model/product_model.dart';
+import '../service/Product_Service.dart';
 
-class EditProductScreen extends ConsumerStatefulWidget {
-  final Map<String, dynamic> product;
+class EditProductScreen extends StatefulWidget {
+  final Product product;
+
   const EditProductScreen({super.key, required this.product});
 
   @override
-  ConsumerState<EditProductScreen> createState() => _EditProductScreenState();
+  State<EditProductScreen> createState() => _EditProductScreenState();
 }
 
-class _EditProductScreenState extends ConsumerState<EditProductScreen> {
+class _EditProductScreenState extends State<EditProductScreen> {
+  final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
   late TextEditingController _priceController;
-  late TextEditingController _stockController;
   late TextEditingController _descController;
-  bool _isSaving = false;
+  late TextEditingController _categoryController;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.product['tenSanPham']);
-    _priceController = TextEditingController(text: widget.product['gia']?.toString());
-    _stockController = TextEditingController(text: widget.product['tonKho']?.toString());
-    _descController = TextEditingController(text: widget.product['moTa'] ?? 'Thông tin sản phẩm phụ phẩm nông nghiệp chất lượng cao.');
+    // Điền sẵn dữ liệu cũ
+    _nameController = TextEditingController(text: widget.product.title);
+    // Xử lý giá tiền về string bỏ .0 nếu là số nguyên
+    String priceStr = widget.product.price % 1 == 0
+        ? widget.product.price.toInt().toString()
+        : widget.product.price.toString();
+    _priceController = TextEditingController(text: priceStr);
+    _descController = TextEditingController(text: widget.product.description);
+    _categoryController = TextEditingController(text: widget.product.category);
   }
 
-  Future<void> _saveProduct() async {
-    setState(() => _isSaving = true);
-    // Giả lập gọi API update
-    await Future.delayed(const Duration(seconds: 1));
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _priceController.dispose();
+    _descController.dispose();
+    _categoryController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleUpdate() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isSubmitting = true);
+
+    // Tạo object mới từ dữ liệu form
+    Product updatedProduct = widget.product.copyWith(
+      title: _nameController.text.trim(),
+      price: double.tryParse(_priceController.text) ?? 0,
+      description: _descController.text.trim(),
+      category: _categoryController.text.trim(),
+    );
+
+    // Gọi Service
+    bool success = await ProductService.updateProduct(updatedProduct);
+
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã cập nhật thông tin sản phẩm!'), backgroundColor: Colors.green),
-      );
-      Navigator.pop(context);
+      setState(() => _isSubmitting = false);
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("✅ Cập nhật thành công!"), backgroundColor: Colors.green),
+        );
+        Navigator.pop(context, true); // Trả về true để màn hình trước reload lại
+      } else {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text("Cập nhật thất bại"),
+            content: const Text("Không thể kết nối đến máy chủ Visual Studio.\nVui lòng kiểm tra lại kết nối hoặc bật Server."),
+            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Đóng"))],
+          ),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = ref.watch(themeProvider) == ThemeMode.dark;
-    final textColor = isDarkMode ? Colors.white : Colors.black87;
-
     return Scaffold(
-      backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F6F9),
-      appBar: AppBar(
-        title: Text('Chỉnh sửa Sản phẩm', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
-        elevation: 0,
-        iconTheme: IconThemeData(color: textColor),
-      ),
+      appBar: AppBar(title: const Text("Sửa sản phẩm"), backgroundColor: Colors.green, foregroundColor: Colors.white),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Stack(
-                children: [
-                  Container(
-                    width: 120, height: 120,
-                    decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(20)),
-                    child: const Icon(Icons.image, size: 50, color: Colors.grey),
-                  ),
-                  Positioned(
-                    bottom: 0, right: 0,
-                    child: CircleAvatar(
-                      backgroundColor: Colors.green,
-                      radius: 18,
-                      child: IconButton(icon: const Icon(Icons.camera_alt, size: 16, color: Colors.white), onPressed: () {}),
-                    ),
-                  )
-                ],
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: "Tên sản phẩm", border: OutlineInputBorder()),
+                validator: (v) => v!.isEmpty ? "Không được để trống" : null,
               ),
-            ),
-            const SizedBox(height: 30),
-            _buildField('Tên sản phẩm', _nameController, isDarkMode),
-            _buildField('Giá bán (đ)', _priceController, isDarkMode, keyboardType: TextInputType.number),
-            _buildField('Số lượng tồn (kg)', _stockController, isDarkMode, keyboardType: TextInputType.number),
-            _buildField('Mô tả sản phẩm', _descController, isDarkMode, maxLines: 4),
-            const SizedBox(height: 40),
-            SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton(
-                onPressed: _isSaving ? null : _saveProduct,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  elevation: 0,
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _priceController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(labelText: "Giá bán (VNĐ)", border: OutlineInputBorder()),
+                validator: (v) => v!.isEmpty ? "Nhập giá tiền" : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _categoryController,
+                decoration: const InputDecoration(labelText: "Loại sản phẩm (Mã hoặc Tên)", border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _descController,
+                maxLines: 3,
+                decoration: const InputDecoration(labelText: "Mô tả", border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _isSubmitting ? null : _handleUpdate,
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                  child: _isSubmitting
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("LƯU THAY ĐỔI", style: TextStyle(fontSize: 18)),
                 ),
-                child: _isSaving 
-                  ? const CircularProgressIndicator(color: Colors.white) 
-                  : const Text('LƯU THAY ĐỔI', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildField(String label, TextEditingController controller, bool isDarkMode, {TextInputType keyboardType = TextInputType.text, int maxLines = 1}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey)),
-          const SizedBox(height: 8),
-          TextField(
-            controller: controller,
-            keyboardType: keyboardType,
-            maxLines: maxLines,
-            style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
-              contentPadding: const EdgeInsets.all(16),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.withOpacity(0.1))),
-            ),
+              )
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

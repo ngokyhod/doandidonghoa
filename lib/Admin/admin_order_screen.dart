@@ -15,8 +15,8 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    // 5 Tabs: Tất cả, Chờ đồng bộ, Chờ xác nhận, Đang giao, Hoàn thành
-    _tabController = TabController(length: 5, vsync: this);
+    // 6 Tabs: Thêm tab Đã hủy để quản lý đơn hủy
+    _tabController = TabController(length: 6, vsync: this);
   }
 
   @override
@@ -26,7 +26,7 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        toolbarHeight: 0, // Ẩn toolbar, chỉ hiện TabBar
+        toolbarHeight: 0,
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
@@ -35,10 +35,11 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
           indicatorColor: Colors.green,
           tabs: const [
             Tab(text: "Tất cả"),
-            Tab(text: "Chờ đồng bộ"), // Tab mới
+            Tab(text: "Chờ đồng bộ"),
             Tab(text: "Chờ xác nhận"),
             Tab(text: "Đang giao"),
             Tab(text: "Hoàn thành"),
+            Tab(text: "Đã hủy"), // Thêm tab này
           ],
         ),
       ),
@@ -46,10 +47,11 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
         controller: _tabController,
         children: [
           _buildOrderList(null), // Tất cả
-          _buildOrderList("sync_false"), // Logic lọc riêng cho sync
+          _buildOrderList("sync_false"),
           _buildOrderList("Chờ xác nhận"),
           _buildOrderList("Đang giao"),
           _buildOrderList("Hoàn thành"),
+          _buildOrderList("Đã hủy"), // List đơn hủy
         ],
       ),
     );
@@ -78,8 +80,8 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
           itemCount: orders.length,
           itemBuilder: (context, index) {
             final orderData = orders[index].data() as Map<String, dynamic>;
-            final orderId = orders[index].id;
-            return _buildOrderItem(orderId, orderData);
+            final docId = orders[index].id;
+            return _buildOrderItem(docId, orderData);
           },
         );
       },
@@ -90,11 +92,17 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
     final formatCurrency = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ');
     final String status = data['trangThai'] ?? 'Chờ xác nhận';
     final double total = (data['tongTien'] ?? 0).toDouble();
-    final bool isSync = data['isSync'] ?? true;
+    final bool isSync = data['isSync'] ?? true; // Quan trọng để biết Backend có chạy không
 
+    // --- MÀU SẮC TRẠNG THÁI ---
     Color statusColor = Colors.orange;
-    if (status == 'Đang giao') statusColor = Colors.blue;
-    if (status == 'Hoàn thành') statusColor = Colors.green;
+    IconData statusIcon = Icons.assignment;
+
+    if (status == 'Đang giao') { statusColor = Colors.blue; statusIcon = Icons.local_shipping; }
+    if (status == 'Hoàn thành') { statusColor = Colors.green; statusIcon = Icons.check_circle; }
+    if (status == 'Đã hủy') { statusColor = Colors.grey; statusIcon = Icons.cancel; }
+
+    // Nếu chưa sync (Backend tắt) thì báo đỏ
     if (!isSync) statusColor = Colors.red;
 
     return Card(
@@ -105,7 +113,7 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(color: statusColor.withOpacity(0.1), shape: BoxShape.circle),
-          child: Icon(Icons.assignment, color: statusColor),
+          child: Icon(statusIcon, color: statusColor),
         ),
         title: Text(
           "Mã: ${data['maDonHang'] ?? '...'}",
@@ -116,15 +124,19 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
           children: [
             Text("Tổng: ${formatCurrency.format(total)}"),
             if (!isSync)
-              const Text("⚠️ Chưa đồng bộ SQL", style: TextStyle(color: Colors.red, fontSize: 12))
+              const Text("⚠️ Chưa đồng bộ SQL (Server lỗi/tắt)", style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold))
             else
-              Text(status, style: TextStyle(color: statusColor, fontSize: 12)),
+              Text(status, style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold)),
           ],
         ),
-        trailing: IconButton(
-          icon: const Icon(Icons.delete_outline, color: Colors.red),
-          onPressed: () => _deleteOrder(docId),
-        ),
+        // --- THAY NÚT XÓA BẰNG NÚT HỦY (Chỉ hiện khi chưa Hoàn thành/Đã hủy) ---
+        trailing: (status != 'Hoàn thành' && status != 'Đã hủy')
+            ? IconButton(
+          icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+          tooltip: "Hủy đơn hàng",
+          onPressed: () => _confirmCancelOrder(docId, data['maDonHang']),
+        )
+            : const SizedBox(), // Ẩn nút nếu đã xong/hủy
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
@@ -133,7 +145,6 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
               children: [
                 const Text("Chi tiết đơn hàng:", style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                // Hiển thị list sản phẩm
                 ...(data['items'] as List<dynamic>? ?? []).map((item) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
@@ -153,7 +164,7 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
                 Text(data['nguoiNhan']?['diaChi'] ?? 'Không có địa chỉ'),
                 const SizedBox(height: 16),
 
-                // --- CÁC NÚT XỬ LÝ TRẠNG THÁI ---
+                // --- NÚT UPDATE TRẠNG THÁI ---
                 if (status == 'Chờ xác nhận')
                   SizedBox(
                     width: double.infinity,
@@ -183,7 +194,35 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
     );
   }
 
-  // Popup chọn đơn vị vận chuyển
+  // --- LOGIC HỦY ĐƠN (THAY CHO DELETE) ---
+  void _confirmCancelOrder(String docId, String? code) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("Hủy đơn hàng $code?"),
+        content: const Text("Đơn hàng sẽ chuyển sang trạng thái 'Đã hủy'.\nHệ thống Visual Studio sẽ cập nhật lại kho hàng."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Quay lại")),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () {
+              // --- CẬP NHẬT TRẠNG THÁI LÊN FIREBASE ---
+              FirebaseFirestore.instance.collection('DonHang').doc(docId).update({
+                'trangThai': 'Đã hủy',
+                'isSync': false, // QUAN TRỌNG: Đánh dấu chưa sync để Backend Visual Studio biết mà xử lý
+                'ngayCapNhat': DateTime.now()
+              });
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đã gửi yêu cầu hủy đơn!")));
+            },
+            child: const Text("Xác nhận Hủy"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Popup chọn đơn vị vận chuyển (Giữ nguyên)
   void _showShippingPopup(String docId) {
     String? selectedCarrier;
     final carriers = ["Giao Hàng Nhanh", "Viettel Post", "J&T Express", "Shopee Express"];
@@ -207,10 +246,11 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
           ElevatedButton(
             onPressed: () {
               if (selectedCarrier != null) {
-                // Cập nhật trạng thái và ĐVVC
+                // Khi update bất cứ gì cũng gán isSync = false để SQL cập nhật theo
                 FirebaseFirestore.instance.collection('DonHang').doc(docId).update({
                   'trangThai': 'Đang giao',
                   'donViVanChuyen': selectedCarrier,
+                  'isSync': false // Trigger Backend
                 });
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đã chuyển sang Đang giao")));
@@ -224,26 +264,9 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
   }
 
   void _updateStatus(String docId, String newStatus) {
-    FirebaseFirestore.instance.collection('DonHang').doc(docId).update({'trangThai': newStatus});
-  }
-
-  void _deleteOrder(String docId) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Xóa đơn hàng?"),
-        content: const Text("Hành động này không thể hoàn tác."),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Hủy")),
-          TextButton(
-            onPressed: () {
-              FirebaseFirestore.instance.collection('DonHang').doc(docId).delete();
-              Navigator.pop(ctx);
-            },
-            child: const Text("Xóa", style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+    FirebaseFirestore.instance.collection('DonHang').doc(docId).update({
+      'trangThai': newStatus,
+      'isSync': false // Trigger Backend
+    });
   }
 }
