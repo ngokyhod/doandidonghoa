@@ -161,4 +161,75 @@ class ProductService {
 
     return null;
   }
+  static Future<bool> deleteProduct(String productId) async {
+    try {
+      print("🗑️ Đang gửi lệnh xóa tới SQL: $productId");
+
+      // B1: Gọi API Xóa bên SQL
+      final response = await http.delete(
+        Uri.parse('$baseUrl/products/$productId'), // Bạn cần viết API Delete bên C#
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        // B2: Nếu SQL xóa thành công -> Xóa trên Firebase
+        await FirebaseFirestore.instance.collection('Products').doc(productId).delete();
+        // Xóa luôn trong collection 'SanPham' nếu bạn dùng song song
+        // await FirebaseFirestore.instance.collection('SanPham').doc(productId).delete();
+
+        print("✅ Đã xóa thành công cả SQL và Firebase");
+        return true;
+      } else {
+        print("❌ Lỗi SQL: ${response.statusCode}");
+        return false;
+      }
+    } catch (e) {
+      print("⚠️ Lỗi kết nối (Server tắt): $e");
+      return false; // Trả về false để UI báo lỗi
+    }
+  }
+
+  // --- 2. HÀM CẬP NHẬT SẢN PHẨM (Yêu cầu Visual Studio Online) ---
+  static Future<bool> updateProduct(Product product) async {
+    try {
+      print("✏️ Đang gửi lệnh sửa tới SQL: ${product.id}");
+
+      // Map Model sang JSON của C# (DTO)
+      final Map<String, dynamic> sqlData = {
+        "M_SanPham": product.id,
+        "TenSanPham": product.title,
+        "Gia": product.price,
+        "MoTa": product.description,
+        "M_Loai": product.category, // Lưu ý: API C# cần xử lý nhận Mã hoặc Tên
+        // "HinhAnh": ... (Xử lý ảnh cập nhật hơi phức tạp, tạm thời bỏ qua nếu chưa cần)
+      };
+
+      // B1: Gọi API Update bên SQL
+      final response = await http.put(
+        Uri.parse('$baseUrl/products/${product.id}'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(sqlData),
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        // B2: SQL thành công -> Cập nhật Firebase
+        // Chỉ cập nhật các trường thay đổi
+        await FirebaseFirestore.instance.collection('Products').doc(product.id).update({
+          'tenSanPham': product.title,
+          'gia': product.price,
+          'moTa': product.description,
+          'category': product.category,
+          'lastUpdated': FieldValue.serverTimestamp()
+        });
+
+        print("✅ Đã cập nhật thành công");
+        return true;
+      } else {
+        print("❌ Lỗi SQL: ${response.body}");
+        return false;
+      }
+    } catch (e) {
+      print("⚠️ Lỗi kết nối Update: $e");
+      return false;
+    }
+  }
 }

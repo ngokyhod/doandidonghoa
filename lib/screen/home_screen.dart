@@ -33,7 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _startBannerAutoPlay();
     _featuredProductsFuture = ProductService.fetchProducts();
     _loadSuggestions();
-    SyncService.syncPendingOrders();
+    SyncService.syncAll();
   }
   Future<void> _refreshData() async {
     setState(() {
