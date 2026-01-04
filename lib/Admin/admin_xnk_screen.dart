@@ -1,234 +1,202 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'admin_api_service.dart';
-import '../theme_notifier.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 
-class AdminXNKScreen extends ConsumerStatefulWidget {
+class AdminXNKScreen extends StatefulWidget {
   const AdminXNKScreen({super.key});
 
   @override
-  ConsumerState<AdminXNKScreen> createState() => _AdminXNKScreenState();
+  State<AdminXNKScreen> createState() => _AdminXNKScreenState();
 }
 
-class _AdminXNKScreenState extends ConsumerState<AdminXNKScreen> with SingleTickerProviderStateMixin {
+class _AdminXNKScreenState extends State<AdminXNKScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    // 2 Tab chính: Kho (Placeholder) và Thu Gom
     _tabController = TabController(length: 2, vsync: this);
   }
 
   @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final isDarkMode = ref.watch(themeProvider) == ThemeMode.dark;
-    final cardColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
-    final textColor = isDarkMode ? Colors.white : Colors.black87;
-
     return Scaffold(
-      backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F6F9),
       appBar: AppBar(
-        title: Text('Quản lý Kho & Thu gom', style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 18)),
-        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        backgroundColor: Colors.white,
         elevation: 0,
-        centerTitle: false,
-        actions: [
-          IconButton(icon: Icon(Icons.notifications_none, color: isDarkMode ? Colors.white70 : Colors.grey), onPressed: () {}),
-          const SizedBox(width: 16),
-        ],
+        toolbarHeight: 0,
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.green,
-          unselectedLabelColor: Colors.grey,
           indicatorColor: Colors.green,
-          indicatorWeight: 3,
           tabs: const [
-            Tab(text: 'Tồn Kho'),
-            Tab(text: 'Thu gom Phụ phẩm'),
+            Tab(text: "Quản lý Kho"),
+            Tab(text: "Yêu cầu Thu Gom"),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildTonKhoTab(isDarkMode, cardColor, textColor),
-          _buildThuGomTab(isDarkMode, cardColor, textColor),
+          const Center(child: Text("Tính năng Quản lý Kho đang phát triển (Nối API sau)")),
+          _buildScrapRequestList(),
         ],
       ),
     );
   }
 
-  Widget _buildTonKhoTab(bool isDarkMode, Color cardColor, Color textColor) {
-    return FutureBuilder<List<dynamic>>(
-      future: AdminApiService.getProducts(),
+  Widget _buildScrapRequestList() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('ThuGom').orderBy('createdAt', descending: true).snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        final list = snapshot.data!;
-        
-        return Column(
-          children: [
-            _buildQuickStats(isDarkMode, cardColor, textColor),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: list.length,
-                itemBuilder: (context, index) {
-                  final item = list[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: cardColor,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                          child: const Icon(Icons.inventory_2, color: Colors.blue),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(item['tenSanPham'] ?? 'N/A', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-                              Text('Mã SP: ${item['maSanPham']}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                            ],
-                          ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text('${item['tonKho'] ?? 0} kg', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 16)),
-                            const Text('Hiện có', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
+        final requests = snapshot.data!.docs;
 
-  Widget _buildQuickStats(bool isDarkMode, Color cardColor, Color textColor) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(child: _statMiniCard('ĐÃ LÊN LỊCH', '12', Icons.calendar_today, Colors.blue, isDarkMode, cardColor)),
-          const SizedBox(width: 12),
-          Expanded(child: _statMiniCard('HOÀN THÀNH', '8', Icons.check_circle, Colors.green, isDarkMode, cardColor)),
-        ],
-      ),
-    );
-  }
+        if (requests.isEmpty) return const Center(child: Text("Không có yêu cầu thu gom nào"));
 
-  Widget _statMiniCard(String label, String value, IconData icon, Color color, bool isDarkMode, Color cardColor) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(12)),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: isDarkMode ? Colors.white : Colors.black, fontSize: 16)),
-              Text(label, style: const TextStyle(fontSize: 8, color: Colors.grey, fontWeight: FontWeight.bold)),
-            ],
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _buildThuGomTab(bool isDarkMode, Color cardColor, Color textColor) {
-    return FutureBuilder<List<dynamic>>(
-      future: AdminApiService.getCollections(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        final list = snapshot.data!;
-        
         return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: list.length,
+          padding: const EdgeInsets.all(12),
+          itemCount: requests.length,
           itemBuilder: (context, index) {
-            final item = list[index];
-            return Container(
-              margin: const EdgeInsets.only(bottom: 16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: cardColor,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.withOpacity(0.1)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Mã YC: ${item['id']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                      _statusBadge(item['trangThai'] ?? 'Chờ xử lý'),
-                    ],
-                  ),
-                  const Divider(height: 24),
-                  _infoLine(Icons.person_outline, item['tenNguoiYeuCau'] ?? ''),
-                  _infoLine(Icons.location_on_outlined, item['diaChi'] ?? ''),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('KHỐI LƯỢNG', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                          Text('${item['khoiLuong'] ?? 0} kg', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      ElevatedButton(
-                        onPressed: () {},
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                        child: const Text('Xác nhận thu gom', style: TextStyle(fontSize: 12)),
-                      )
-                    ],
-                  )
-                ],
-              ),
-            );
+            final data = requests[index].data() as Map<String, dynamic>;
+            final docId = requests[index].id;
+            return _buildScrapItem(docId, data);
           },
         );
       },
     );
   }
 
-  Widget _infoLine(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(children: [Icon(icon, size: 14, color: Colors.grey), const SizedBox(width: 8), Expanded(child: Text(text, style: const TextStyle(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis))]),
+  Widget _buildScrapItem(String docId, Map<String, dynamic> data) {
+    // Mapping trạng thái
+    String statusRaw = data['trangThaiXuLy'] ?? 'MoiYeuCau';
+    String statusDisplay = "Chờ xử lý";
+    Color statusColor = Colors.orange;
+
+    if (statusRaw == 'DaLenLich') { statusDisplay = "Đã lên lịch"; statusColor = Colors.blue; }
+    if (statusRaw == 'DangThuGom') { statusDisplay = "Đang thu gom"; statusColor = Colors.purple; }
+    if (statusRaw == 'HoanThanh') { statusDisplay = "Hoàn thành"; statusColor = Colors.green; }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ExpansionTile(
+        leading: Icon(Icons.recycling, color: statusColor, size: 32),
+        title: Text(data['productName'] ?? 'Phế liệu', style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text("$statusDisplay - ${data['amount']}kg"),
+        trailing: IconButton(
+          icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+          onPressed: () => _updateStatus(docId, 'Huy'), // Logic hủy
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Người bán: ${data['contactName']} - ${data['contactPhone']}"),
+                Text("Địa chỉ: ${data['fullAddress']}"),
+                Text("Giá mong muốn: ${data['giaTriMongMuon']} đ"),
+                const SizedBox(height: 12),
+
+                // --- BUTTONS LOGIC ---
+
+                // 1. Nếu Chờ xử lý -> Hiện nút Lên lịch
+                if (statusRaw == 'MoiYeuCau')
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.calendar_month),
+                      label: const Text("Lên lịch thu gom"),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                      onPressed: () => _showDatePicker(docId),
+                    ),
+                  ),
+
+                // 2. Nếu Đã lên lịch -> Nút Bắt đầu
+                if (statusRaw == 'DaLenLich')
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.start),
+                      label: const Text("Bắt đầu thu gom"),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
+                      onPressed: () => _updateStatus(docId, 'DangThuGom'),
+                    ),
+                  ),
+
+                // 3. Nếu Đang thu gom -> Nút Chọn kho & Hoàn thành
+                if (statusRaw == 'DangThuGom')
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.warehouse),
+                      label: const Text("Chọn kho & Hoàn thành"),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                      onPressed: () => _showWarehousePopup(docId),
+                    ),
+                  ),
+              ],
+            ),
+          )
+        ],
+      ),
     );
   }
 
-  Widget _statusBadge(String status) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-      child: Text(status, style: const TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
+  // Popup chọn ngày
+  void _showDatePicker(String docId) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().add(const Duration(days: 1)),
+      firstDate: DateTime.now(), // Không được chọn quá khứ
+      lastDate: DateTime(2030),
     );
+
+    if (picked != null) {
+      // Cập nhật ngày và trạng thái
+      FirebaseFirestore.instance.collection('ThuGom').doc(docId).update({
+        'ngayThuGomDuKien': picked.toIso8601String(),
+        'trangThaiXuLy': 'DaLenLich'
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đã lên lịch thu gom")));
+    }
+  }
+
+  // Popup chọn kho
+  void _showWarehousePopup(String docId) {
+    String? selectedWarehouse;
+    final warehouses = ["Kho A - Quận 1", "Kho B - Thủ Đức", "Kho Tổng Long An"];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Chọn kho nhập hàng"),
+        content: DropdownButtonFormField<String>(
+          decoration: const InputDecoration(labelText: "Danh sách kho", border: OutlineInputBorder()),
+          items: warehouses.map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
+          onChanged: (val) => selectedWarehouse = val,
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              if (selectedWarehouse != null) {
+                FirebaseFirestore.instance.collection('ThuGom').doc(docId).update({
+                  'khoNhap': selectedWarehouse,
+                  'trangThaiXuLy': 'HoanThanh'
+                });
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Thu gom hoàn tất!")));
+              }
+            },
+            child: const Text("Xác nhận"),
+          )
+        ],
+      ),
+    );
+  }
+
+  void _updateStatus(String docId, String status) {
+    FirebaseFirestore.instance.collection('ThuGom').doc(docId).update({'trangThaiXuLy': status});
   }
 }

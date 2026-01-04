@@ -1,160 +1,249 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'admin_api_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import '../theme_notifier.dart';
-import 'widgets/admin_notification_bell.dart'; // IMPORT WIDGET CHUÔNG XỊN
 
-class AdminOrderScreen extends ConsumerStatefulWidget {
+class AdminOrderScreen extends StatefulWidget {
   const AdminOrderScreen({super.key});
 
   @override
-  ConsumerState<AdminOrderScreen> createState() => _AdminOrderScreenState();
+  State<AdminOrderScreen> createState() => _AdminOrderScreenState();
 }
 
-class _AdminOrderScreenState extends ConsumerState<AdminOrderScreen> {
-  final currencyFormat = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ');
-  String _selectedStatus = "All";
+class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    // 5 Tabs: Tất cả, Chờ đồng bộ, Chờ xác nhận, Đang giao, Hoàn thành
+    _tabController = TabController(length: 5, vsync: this);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = ref.watch(themeProvider) == ThemeMode.dark;
-    final cardColor = isDarkMode ? const Color(0xFF1E1E1E) : Colors.white;
-    final textColor = isDarkMode ? Colors.white : Colors.black;
-
     return Scaffold(
-      backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F6F9),
+      backgroundColor: const Color(0xFFF5F6F9),
       appBar: AppBar(
-        title: Text('Quản lý Đơn Hàng', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-        backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+        backgroundColor: Colors.white,
         elevation: 0,
-        actions: [
-          // SỬA TẠI ĐÂY: Sử dụng AdminNotificationBell thay vì IconButton thông thường
-          const AdminNotificationBell(), 
-          const CircleAvatar(radius: 15, backgroundColor: Colors.blue, child: Text('PH', style: TextStyle(fontSize: 10, color: Colors.white))),
-          const SizedBox(width: 16),
-        ],
+        toolbarHeight: 0, // Ẩn toolbar, chỉ hiện TabBar
+        bottom: TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          labelColor: Colors.green,
+          unselectedLabelColor: Colors.grey,
+          indicatorColor: Colors.green,
+          tabs: const [
+            Tab(text: "Tất cả"),
+            Tab(text: "Chờ đồng bộ"), // Tab mới
+            Tab(text: "Chờ xác nhận"),
+            Tab(text: "Đang giao"),
+            Tab(text: "Hoàn thành"),
+          ],
+        ),
       ),
-      body: Column(
+      body: TabBarView(
+        controller: _tabController,
         children: [
-          _buildStatusFilter(isDarkMode),
-          Expanded(child: _buildOrderList(isDarkMode, cardColor)),
+          _buildOrderList(null), // Tất cả
+          _buildOrderList("sync_false"), // Logic lọc riêng cho sync
+          _buildOrderList("Chờ xác nhận"),
+          _buildOrderList("Đang giao"),
+          _buildOrderList("Hoàn thành"),
         ],
       ),
     );
   }
 
-  Widget _buildStatusFilter(bool isDarkMode) {
-    final statuses = ["All", "Chờ xác nhận", "Đang giao", "Hoàn thành", "Đã hủy"];
-    return Container(
-      height: 50,
-      color: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: statuses.length,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemBuilder: (context, index) {
-          final s = statuses[index];
-          final isSelected = _selectedStatus == s;
-          return GestureDetector(
-            onTap: () => setState(() => _selectedStatus = s),
-            child: Container(
-              margin: const EdgeInsets.only(right: 12, top: 10, bottom: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: isSelected ? Colors.green : (isDarkMode ? Colors.grey.shade800 : Colors.grey.shade100),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              alignment: Alignment.center,
-              child: Text(s, style: TextStyle(color: isSelected ? Colors.white : (isDarkMode ? Colors.white70 : Colors.black), fontSize: 12, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-            ),
-          );
-        },
-      ),
-    );
-  }
+  Widget _buildOrderList(String? statusFilter) {
+    Query query = FirebaseFirestore.instance.collection('DonHang').orderBy('ngayDat', descending: true);
 
-  Widget _buildOrderList(bool isDarkMode, Color cardColor) {
-    return FutureBuilder<List<dynamic>>(
-      future: AdminApiService.getOrders(status: _selectedStatus),
+    if (statusFilter == "sync_false") {
+      query = query.where('isSync', isEqualTo: false);
+    } else if (statusFilter != null) {
+      query = query.where('trangThai', isEqualTo: statusFilter);
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: query.snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) return Center(child: Text("Lỗi: ${snapshot.error}"));
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        final orders = snapshot.data!;
-        if (orders.isEmpty) return Center(child: Text("Không có đơn hàng nào", style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black54)));
+
+        final orders = snapshot.data!.docs;
+        if (orders.isEmpty) return const Center(child: Text("Chưa có đơn hàng nào"));
 
         return ListView.builder(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           itemCount: orders.length,
           itemBuilder: (context, index) {
-            final o = orders[index];
-            return Card(
-              color: cardColor,
-              margin: const EdgeInsets.only(bottom: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Đơn: ${o['maDonHang']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                        Text(currencyFormat.format(o['tongTien'] ?? 0), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDarkMode ? Colors.white : Colors.black)),
-                      ],
-                    ),
-                    const Divider(height: 24),
-                    _infoRow(Icons.person_outline, o['tenNguoiNhan'] ?? '', isDarkMode),
-                    _infoRow(Icons.calendar_today_outlined, o['ngayDat'] != null ? DateFormat('dd/MM/yyyy HH:mm').format(DateTime.parse(o['ngayDat'])) : '', isDarkMode),
-                    _infoRow(Icons.shopping_bag_outlined, '${o['soLuongSanPham']} sản phẩm', isDarkMode),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        _statusBadge(o['trangThai'] ?? ''),
-                        const Spacer(),
-                        OutlinedButton(onPressed: () {}, child: const Text('Xem')),
-                        const SizedBox(width: 8),
-                        if (o['trangThai'] == 'Chờ xác nhận')
-                          ElevatedButton(
-                            onPressed: () => _updateStatus(o['maDonHang'], "Đang giao"),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                            child: const Text('Xác nhận'),
-                          ),
-                      ],
-                    )
-                  ],
-                ),
-              ),
-            );
+            final orderData = orders[index].data() as Map<String, dynamic>;
+            final orderId = orders[index].id;
+            return _buildOrderItem(orderId, orderData);
           },
         );
       },
     );
   }
 
-  void _updateStatus(String id, String status) async {
-    bool success = await AdminApiService.updateOrderStatus(id, status);
-    if (success) {
-      setState(() {});
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đã cập nhật trạng thái")));
-    }
-  }
+  Widget _buildOrderItem(String docId, Map<String, dynamic> data) {
+    final formatCurrency = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ');
+    final String status = data['trangThai'] ?? 'Chờ xác nhận';
+    final double total = (data['tongTien'] ?? 0).toDouble();
+    final bool isSync = data['isSync'] ?? true;
 
-  Widget _infoRow(IconData icon, String text, bool isDarkMode) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(children: [Icon(icon, size: 14, color: Colors.grey), const SizedBox(width: 8), Text(text, style: TextStyle(fontSize: 13, color: isDarkMode ? Colors.white70 : Colors.black87))]),
+    Color statusColor = Colors.orange;
+    if (status == 'Đang giao') statusColor = Colors.blue;
+    if (status == 'Hoàn thành') statusColor = Colors.green;
+    if (!isSync) statusColor = Colors.red;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: statusColor.withOpacity(0.1), shape: BoxShape.circle),
+          child: Icon(Icons.assignment, color: statusColor),
+        ),
+        title: Text(
+          "Mã: ${data['maDonHang'] ?? '...'}",
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Tổng: ${formatCurrency.format(total)}"),
+            if (!isSync)
+              const Text("⚠️ Chưa đồng bộ SQL", style: TextStyle(color: Colors.red, fontSize: 12))
+            else
+              Text(status, style: TextStyle(color: statusColor, fontSize: 12)),
+          ],
+        ),
+        trailing: IconButton(
+          icon: const Icon(Icons.delete_outline, color: Colors.red),
+          onPressed: () => _deleteOrder(docId),
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Chi tiết đơn hàng:", style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                // Hiển thị list sản phẩm
+                ...(data['items'] as List<dynamic>? ?? []).map((item) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Text("${item['ten']}", style: const TextStyle(fontWeight: FontWeight.w500)),
+                        const Spacer(),
+                        Text("x${item['soLuong']}"),
+                        const SizedBox(width: 8),
+                        Text(formatCurrency.format(item['gia'])),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                const Divider(),
+                const Text("Địa chỉ:", style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(data['nguoiNhan']?['diaChi'] ?? 'Không có địa chỉ'),
+                const SizedBox(height: 16),
+
+                // --- CÁC NÚT XỬ LÝ TRẠNG THÁI ---
+                if (status == 'Chờ xác nhận')
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.local_shipping),
+                      label: const Text("Xác nhận & Chọn ĐVVC"),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                      onPressed: () => _showShippingPopup(docId),
+                    ),
+                  ),
+
+                if (status == 'Đang giao')
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.check_circle),
+                      label: const Text("Xác nhận Hoàn Thành"),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                      onPressed: () => _updateStatus(docId, 'Hoàn thành'),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _statusBadge(String status) {
-    Color color = Colors.orange;
-    if (status == "Hoàn thành") color = Colors.green;
-    if (status == "Đã hủy") color = Colors.red;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-      child: Text(status, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+  // Popup chọn đơn vị vận chuyển
+  void _showShippingPopup(String docId) {
+    String? selectedCarrier;
+    final carriers = ["Giao Hàng Nhanh", "Viettel Post", "J&T Express", "Shopee Express"];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Cập nhật vận chuyển"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: "Chọn đơn vị vận chuyển", border: OutlineInputBorder()),
+              items: carriers.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+              onChanged: (val) => selectedCarrier = val,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Hủy")),
+          ElevatedButton(
+            onPressed: () {
+              if (selectedCarrier != null) {
+                // Cập nhật trạng thái và ĐVVC
+                FirebaseFirestore.instance.collection('DonHang').doc(docId).update({
+                  'trangThai': 'Đang giao',
+                  'donViVanChuyen': selectedCarrier,
+                });
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đã chuyển sang Đang giao")));
+              }
+            },
+            child: const Text("Xác nhận"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _updateStatus(String docId, String newStatus) {
+    FirebaseFirestore.instance.collection('DonHang').doc(docId).update({'trangThai': newStatus});
+  }
+
+  void _deleteOrder(String docId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Xóa đơn hàng?"),
+        content: const Text("Hành động này không thể hoàn tác."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Hủy")),
+          TextButton(
+            onPressed: () {
+              FirebaseFirestore.instance.collection('DonHang').doc(docId).delete();
+              Navigator.pop(ctx);
+            },
+            child: const Text("Xóa", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme_notifier.dart';
 import 'admin_tab_provider.dart';
-import 'admin_api_service.dart'; // IMPORT API SERVICE
+import 'admin_api_service.dart';
 
 class AdminUsersScreen extends ConsumerStatefulWidget {
   const AdminUsersScreen({super.key});
@@ -32,8 +32,8 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> with Single
     return Scaffold(
       backgroundColor: isDarkMode ? const Color(0xFF121212) : const Color(0xFFF5F6F9),
       appBar: AppBar(
-        title: Text('Khách hàng & Hỗ trợ', 
-          style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 18)),
+        title: Text('Khách hàng & Hỗ trợ',
+            style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 18)),
         backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
         elevation: 0,
         bottom: TabBar(
@@ -121,7 +121,8 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> with Single
                   showBadge: unread,
                   child: const CircleAvatar(backgroundColor: Colors.blue, child: Icon(Icons.chat, color: Colors.white)),
                 ),
-                title: Text(room['userName'] ?? 'Khách hàng', style: TextStyle(fontWeight: unread ? FontWeight.bold : FontWeight.normal, color: textColor)),
+                // --- SỬA LỖI HIỂN THỊ TÊN TẠI ĐÂY ---
+                title: _UserNameFromFirestore(uid: userId, fallback: room['userName'] ?? 'Khách hàng', textColor: textColor, isBold: unread),
                 subtitle: Text(room['lastMessage'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
                 trailing: const Icon(Icons.chevron_right, size: 16),
               ),
@@ -213,6 +214,37 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> with Single
 
   void _showSnackBar(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+}
+
+// Widget con để tra cứu tên người dùng từ UID Firestore
+class _UserNameFromFirestore extends StatelessWidget {
+  final String uid;
+  final String fallback;
+  final Color textColor;
+  final bool isBold;
+
+  const _UserNameFromFirestore({required this.uid, required this.fallback, required this.textColor, this.isBold = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+      builder: (context, snapshot) {
+        String name = fallback;
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>;
+          name = data['fullName'] ?? data['email'] ?? fallback;
+        }
+        return Text(
+          name,
+          style: TextStyle(
+            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            color: textColor,
+          ),
+        );
+      },
+    );
   }
 }
 
