@@ -62,21 +62,37 @@ class AdminApiService {
     return [];
   }
 
-  // 3. Cập nhật trạng thái đơn
-  static Future<bool> updateOrderStatus(String maDonHang, String trangThaiMoi) async {
+  static Future<bool> pushOrderStatus({
+    required String orderId,
+    required String status,
+    String? carrier
+  }) async {
     try {
+      final url = Uri.parse('${ApiService.baseUrl}/update-order-status');
+
       final response = await http.post(
-        Uri.parse('$baseUrl/orders/update-status'),
-        headers: {'Content-Type': 'application/json'},
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          // "Authorization": "Bearer $token", // Nếu có bảo mật
+        },
         body: jsonEncode({
-          'MaDonHang': maDonHang,
-          'TrangThaiMoi': trangThaiMoi,
+          "maDonHang": orderId,        // Phải khớp với DTO C#
+          "trangThai": status,         // Phải khớp với DTO C#
+          "donViVanChuyen": carrier    // (Tuỳ chọn)
         }),
       );
-      return response.statusCode == 200;
+
+      if (response.statusCode == 200) {
+        print("✅ Đã push trạng thái lên Server thành công!");
+        return true;
+      } else {
+        print("❌ Server trả lỗi: ${response.body}");
+        return false;
+      }
     } catch (e) {
-      debugPrint("❌ AdminApi Error (UpdateStatus): $e");
-      return false;
+      print("⚠️ Lỗi kết nối tới Visual Studio: $e");
+      return false; // Trả về false để UI biết đường xử lý fallback
     }
   }
 

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
+import '../service/admin_api_service.dart';
+
 class AdminOrderScreen extends StatefulWidget {
   const AdminOrderScreen({super.key});
 
@@ -172,7 +174,8 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
                       icon: const Icon(Icons.local_shipping),
                       label: const Text("Xác nhận & Chọn ĐVVC"),
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-                      onPressed: () => _showShippingPopup(docId),
+                      // Truyền thêm data['maDonHang'] làm tham số thứ 2
+                      onPressed: () => _showShippingPopup(docId, data['maDonHang'] ?? ''),
                     ),
                   ),
 
@@ -200,20 +203,46 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text("Hủy đơn hàng $code?"),
-        content: const Text("Đơn hàng sẽ chuyển sang trạng thái 'Đã hủy'.\nHệ thống Visual Studio sẽ cập nhật lại kho hàng."),
+        content: const Text("Đơn hàng sẽ chuyển sang trạng thái 'Đã hủy'."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Quay lại")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () {
-              // --- CẬP NHẬT TRẠNG THÁI LÊN FIREBASE ---
-              FirebaseFirestore.instance.collection('DonHang').doc(docId).update({
-                'trangThai': 'Đã hủy',
-                'isSync': false, // QUAN TRỌNG: Đánh dấu chưa sync để Backend Visual Studio biết mà xử lý
-                'ngayCapNhat': DateTime.now()
-              });
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đã gửi yêu cầu hủy đơn!")));
+            onPressed: () async {
+              Navigator.pop(ctx); // Đóng popup trước
+
+              // Hiện loading
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (_) => const Center(child: CircularProgressIndicator()),
+              );
+
+              // A. GỌI API PUSH LÊN SERVER (Cách chính thống)
+              bool success = await AdminApiService.pushOrderStatus(
+                  orderId: code ?? "",
+                  status: "Đã hủy"
+              );
+
+              // Tắt loading
+              if (mounted) Navigator.pop(context);
+
+              if (success) {
+                // Nếu thành công: Không cần làm gì cả,
+                // Server đã update Firebase -> Stream sẽ tự cập nhật UI
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("✅ Server đã xác nhận hủy đơn!")));
+              } else {
+                // B. FALLBACK: NẾU SERVER CHẾT -> UPDATE TRỰC TIẾP FIREBASE (Cách dự phòng)
+                FirebaseFirestore.instance.collection('DonHang').doc(docId).update({
+                  'trangThai': 'Đã hủy',
+                  'isSync': false, // Báo đỏ: Chưa đồng bộ
+                  'ngayCapNhat': DateTime.now()
+                });
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("⚠️ Server không phản hồi. Đã lưu tạm offline!")),
+                );
+              }
             },
             child: const Text("Xác nhận Hủy"),
           ),
@@ -223,7 +252,7 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
   }
 
   // Popup chọn đơn vị vận chuyển (Giữ nguyên)
-  void _showShippingPopup(String docId) {
+  void _showShippingPopup(String docId, String orderCode) { // Thêm orderCode tham số
     String? selectedCarrier;
     final carriers = ["Giao Hàng Nhanh", "Viettel Post", "J&T Express", "Shopee Express"];
 
@@ -244,16 +273,28 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Hủy")),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (selectedCarrier != null) {
-                // Khi update bất cứ gì cũng gán isSync = false để SQL cập nhật theo
-                FirebaseFirestore.instance.collection('DonHang').doc(docId).update({
-                  'trangThai': 'Đang giao',
-                  'donViVanChuyen': selectedCarrier,
-                  'isSync': false // Trigger Backend
-                });
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đã chuyển sang Đang giao")));
+
+                // Tương tự: Gọi API Push lên trước
+                bool success = await AdminApiService.pushOrderStatus(
+                    orderId: orderCode,
+                    status: "Đang giao",
+                    carrier: selectedCarrier
+                );
+
+                if (!success) {
+                  // Fallback nếu lỗi
+                  FirebaseFirestore.instance.collection('DonHang').doc(docId).update({
+                    'trangThai': 'Đang giao',
+                    'donViVanChuyen': selectedCarrier,
+                    'isSync': false
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("⚠️ Server lỗi. Đã lưu offline.")));
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("✅ Đã chuyển sang Đang giao")));
+                }
               }
             },
             child: const Text("Xác nhận"),

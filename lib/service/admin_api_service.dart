@@ -34,4 +34,37 @@ class AdminApiService {
       return false;
     }
   }
+  static Future<bool> pushOrderStatus({
+    required String orderId,
+    required String status,
+    String? carrier
+  }) async {
+    try {
+      final url = Uri.parse('${ApiService.baseUrl}/update-order-status');
+
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          // "Authorization": "Bearer $token", // Nếu có bảo mật
+        },
+        body: jsonEncode({
+          "maDonHang": orderId,        // Phải khớp với DTO C#
+          "trangThai": status,         // Phải khớp với DTO C#
+          "donViVanChuyen": carrier    // (Tuỳ chọn)
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        print("✅ Đã push trạng thái lên Server thành công!");
+        return true;
+      } else {
+        print("❌ Server trả lỗi: ${response.body}");
+        return false;
+      }
+    } catch (e) {
+      print("⚠️ Lỗi kết nối tới Visual Studio: $e");
+      return false; // Trả về false để UI biết đường xử lý fallback
+    }
+  }
 }
