@@ -3,8 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../model/product_model.dart';
-import '../service/cart_service.dart'; // Import CartService
+import '../service/cart_service.dart';
 import 'package:flutter/services.dart';
+
 class ProductDetailScreen extends StatefulWidget {
   final Product product;
   const ProductDetailScreen({super.key, required this.product});
@@ -43,13 +44,22 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       return;
     }
 
-    // --- THÊM ĐIỀU KIỆN 1000KG ---
+    // 3. Kiểm tra giới hạn 1000kg
     if (weight > 1000) {
       setState(() => _errorText = "Khối lượng quá lớn (Tối đa 1000kg)");
       return;
     }
 
-    // 3. Thêm vào giỏ hàng và chuyển trang
+    // --- 4. (MỚI) KIỂM TRA TỒN KHO ---
+    // So sánh số lượng khách nhập với tồn kho thực tế
+    if (weight > widget.product.stockQuantity) {
+      setState(() {
+        _errorText = "Quá tồn kho (Chỉ còn ${widget.product.stockQuantity} ${widget.product.unit})";
+      });
+      return;
+    }
+
+    // 5. Thêm vào giỏ hàng và chuyển trang
     CartService.addToCart(widget.product, weight);
 
     // Reset lỗi
@@ -60,7 +70,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       SnackBar(content: Text("Đã thêm ${weight}kg ${widget.product.title} vào giỏ!"), backgroundColor: Colors.green),
     );
 
-    context.push('/cart'); // Chuyển sang màn hình giỏ hàng
+    context.push('/cart');
   }
 
   @override
@@ -85,11 +95,29 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Giá và Tên
+            // Giá
             Text(formatCurrency.format(widget.product.price) + " / kg",
                 style: const TextStyle(fontSize: 20, color: Colors.red, fontWeight: FontWeight.bold)),
+
             const SizedBox(height: 8),
+
+            // Tên sản phẩm
             Text(widget.product.title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+
+            const SizedBox(height: 8),
+
+            // --- (MỚI) HIỂN THỊ TỒN KHO ---
+            Row(
+              children: [
+                const Icon(Icons.inventory_2_outlined, size: 18, color: Colors.blueGrey),
+                const SizedBox(width: 6),
+                Text(
+                  "Tồn kho: ${widget.product.stockQuantity} ${widget.product.unit}",
+                  style: const TextStyle(fontSize: 16, color: Colors.blueGrey, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+
             const SizedBox(height: 16),
             Text(widget.product.description, style: const TextStyle(fontSize: 16, color: Colors.grey)),
             const SizedBox(height: 24),
@@ -101,15 +129,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               controller: _weightController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [
-                // Regex này chỉ cho phép nhập số dương và TỐI ĐA 1 số sau dấu chấm
-                // Ví dụ: 10.5 (OK), 10.55 (Chặn)
                 FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}')),
               ],
               decoration: InputDecoration(
-                hintText: "Ví dụ: 59.6",
+                hintText: "Ví dụ: 10.5",
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 suffixText: "kg",
-                errorText: _errorText, // Biến hiển thị lỗi
+                errorText: _errorText, // Hiển thị lỗi tồn kho ở đây
               ),
             ),
             const SizedBox(height: 24),
@@ -119,10 +145,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               width: double.infinity,
               height: 50,
               child: ElevatedButton.icon(
-                onPressed: _addToCart,
+                // Nếu hết hàng thì vô hiệu hóa nút bấm
+                onPressed: widget.product.stockQuantity > 0 ? _addToCart : null,
                 icon: const Icon(Icons.add_shopping_cart, color: Colors.white),
-                label: const Text("Thêm vào giỏ hàng", style: TextStyle(fontSize: 18, color: Colors.white)),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                label: Text(
+                  widget.product.stockQuantity > 0 ? "Thêm vào giỏ hàng" : "Hết hàng",
+                  style: const TextStyle(fontSize: 18, color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: widget.product.stockQuantity > 0 ? Colors.green : Colors.grey,
+                ),
               ),
             ),
           ],

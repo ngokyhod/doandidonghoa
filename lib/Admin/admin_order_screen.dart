@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-
 import '../service/admin_api_service.dart';
 
 class AdminOrderScreen extends StatefulWidget {
@@ -17,8 +16,8 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    // 6 Tabs: Thêm tab Đã hủy để quản lý đơn hủy
-    _tabController = TabController(length: 6, vsync: this);
+    // 5 Tabs: Bỏ tab "Chờ đồng bộ" vì không còn dùng tính năng này nữa
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -37,23 +36,21 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
           indicatorColor: Colors.green,
           tabs: const [
             Tab(text: "Tất cả"),
-            Tab(text: "Chờ đồng bộ"),
             Tab(text: "Chờ xác nhận"),
             Tab(text: "Đang giao"),
             Tab(text: "Hoàn thành"),
-            Tab(text: "Đã hủy"), // Thêm tab này
+            Tab(text: "Đã hủy"),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildOrderList(null), // Tất cả
-          _buildOrderList("sync_false"),
+          _buildOrderList(null),
           _buildOrderList("Chờ xác nhận"),
           _buildOrderList("Đang giao"),
           _buildOrderList("Hoàn thành"),
-          _buildOrderList("Đã hủy"), // List đơn hủy
+          _buildOrderList("Đã hủy"),
         ],
       ),
     );
@@ -62,9 +59,7 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
   Widget _buildOrderList(String? statusFilter) {
     Query query = FirebaseFirestore.instance.collection('DonHang').orderBy('ngayDat', descending: true);
 
-    if (statusFilter == "sync_false") {
-      query = query.where('isSync', isEqualTo: false);
-    } else if (statusFilter != null) {
+    if (statusFilter != null) {
       query = query.where('trangThai', isEqualTo: statusFilter);
     }
 
@@ -94,18 +89,14 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
     final formatCurrency = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ');
     final String status = data['trangThai'] ?? 'Chờ xác nhận';
     final double total = (data['tongTien'] ?? 0).toDouble();
-    final bool isSync = data['isSync'] ?? true; // Quan trọng để biết Backend có chạy không
 
-    // --- MÀU SẮC TRẠNG THÁI ---
+    // Logic hiển thị màu sắc
     Color statusColor = Colors.orange;
     IconData statusIcon = Icons.assignment;
 
     if (status == 'Đang giao') { statusColor = Colors.blue; statusIcon = Icons.local_shipping; }
     if (status == 'Hoàn thành') { statusColor = Colors.green; statusIcon = Icons.check_circle; }
     if (status == 'Đã hủy') { statusColor = Colors.grey; statusIcon = Icons.cancel; }
-
-    // Nếu chưa sync (Backend tắt) thì báo đỏ
-    if (!isSync) statusColor = Colors.red;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -121,24 +112,24 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
           "Mã: ${data['maDonHang'] ?? '...'}",
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("Tổng: ${formatCurrency.format(total)}"),
-            if (!isSync)
-              const Text("⚠️ Chưa đồng bộ SQL (Server lỗi/tắt)", style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold))
-            else
-              Text(status, style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold)),
-          ],
+        subtitle: Text(
+          "Tổng: ${formatCurrency.format(total)}\n$status",
+          style: TextStyle(color: statusColor, fontSize: 13, height: 1.5),
         ),
-        // --- THAY NÚT XÓA BẰNG NÚT HỦY (Chỉ hiện khi chưa Hoàn thành/Đã hủy) ---
+        // --- NÚT HỦY ĐƠN ---
         trailing: (status != 'Hoàn thành' && status != 'Đã hủy')
             ? IconButton(
           icon: const Icon(Icons.cancel_outlined, color: Colors.red),
           tooltip: "Hủy đơn hàng",
-          onPressed: () => _confirmCancelOrder(docId, data['maDonHang']),
-        )
-            : const SizedBox(), // Ẩn nút nếu đã xong/hủy
+          onPressed: () => _confirmAction(
+              context: context,
+              title: "Hủy đơn hàng này?",
+              content: "Hành động này yêu cầu kết nối Server để hoàn trả tồn kho.",
+              docId: docId,
+              orderCode: data['maDonHang'] ?? '',
+              newStatus: 'Đã hủy'
+          ),
+        ) : const SizedBox(),
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
@@ -152,8 +143,7 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(
                       children: [
-                        Text("${item['ten']}", style: const TextStyle(fontWeight: FontWeight.w500)),
-                        const Spacer(),
+                        Expanded(child: Text("${item['ten']}", style: const TextStyle(fontWeight: FontWeight.w500))),
                         Text("x${item['soLuong']}"),
                         const SizedBox(width: 8),
                         Text(formatCurrency.format(item['gia'])),
@@ -172,9 +162,8 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.local_shipping),
-                      label: const Text("Xác nhận & Chọn ĐVVC"),
+                      label: const Text("Xác nhận & Giao hàng"),
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-                      // Truyền thêm data['maDonHang'] làm tham số thứ 2
                       onPressed: () => _showShippingPopup(docId, data['maDonHang'] ?? ''),
                     ),
                   ),
@@ -186,7 +175,14 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
                       icon: const Icon(Icons.check_circle),
                       label: const Text("Xác nhận Hoàn Thành"),
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                      onPressed: () => _updateStatus(docId, 'Hoàn thành'),
+                      onPressed: () => _confirmAction(
+                          context: context,
+                          title: "Xác nhận hoàn thành?",
+                          content: "Đơn hàng sẽ được ghi nhận doanh thu vào hệ thống SQL.",
+                          docId: docId,
+                          orderCode: data['maDonHang'] ?? '',
+                          newStatus: 'Hoàn thành'
+                      ),
                     ),
                   ),
               ],
@@ -197,104 +193,114 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
     );
   }
 
-  // --- LOGIC HỦY ĐƠN (THAY CHO DELETE) ---
-  void _confirmCancelOrder(String docId, String? code) {
+  // --- HÀM XỬ LÝ CHUNG CHO CẢ HỦY VÀ HOÀN THÀNH ---
+  void _confirmAction({
+    required BuildContext context,
+    required String title,
+    required String content,
+    required String docId,
+    required String orderCode,
+    required String newStatus,
+    String? carrier,
+  }) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text("Hủy đơn hàng $code?"),
-        content: const Text("Đơn hàng sẽ chuyển sang trạng thái 'Đã hủy'."),
+        title: Text(title),
+        content: Text(content),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Quay lại")),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Thoát")),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
             onPressed: () async {
-              Navigator.pop(ctx); // Đóng popup trước
-
-              // Hiện loading
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (_) => const Center(child: CircularProgressIndicator()),
-              );
-
-              // A. GỌI API PUSH LÊN SERVER (Cách chính thống)
-              bool success = await AdminApiService.pushOrderStatus(
-                  orderId: code ?? "",
-                  status: "Đã hủy"
-              );
-
-              // Tắt loading
-              if (mounted) Navigator.pop(context);
-
-              if (success) {
-                // Nếu thành công: Không cần làm gì cả,
-                // Server đã update Firebase -> Stream sẽ tự cập nhật UI
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("✅ Server đã xác nhận hủy đơn!")));
-              } else {
-                // B. FALLBACK: NẾU SERVER CHẾT -> UPDATE TRỰC TIẾP FIREBASE (Cách dự phòng)
-                FirebaseFirestore.instance.collection('DonHang').doc(docId).update({
-                  'trangThai': 'Đã hủy',
-                  'isSync': false, // Báo đỏ: Chưa đồng bộ
-                  'ngayCapNhat': DateTime.now()
-                });
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("⚠️ Server không phản hồi. Đã lưu tạm offline!")),
-                );
-              }
+              Navigator.pop(ctx);
+              _processUpdate(docId, orderCode, newStatus, carrier);
             },
-            child: const Text("Xác nhận Hủy"),
+            child: const Text("Đồng ý"),
           ),
         ],
       ),
     );
   }
 
-  // Popup chọn đơn vị vận chuyển (Giữ nguyên)
-  void _showShippingPopup(String docId, String orderCode) { // Thêm orderCode tham số
+  // --- HÀM CORE XỬ LÝ GỌI API ---
+  Future<void> _processUpdate(String docId, String orderCode, String newStatus, String? carrier) async {
+    // Hiện Loading (Dùng useRootNavigator: true để nó nằm đè lên tất cả)
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true, // <--- THÊM DÒNG NÀY
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    bool serverSuccess = false;
+
+    try {
+      // Gọi API lên Server
+      serverSuccess = await AdminApiService.pushOrderStatus(
+          orderId: orderCode,
+          status: newStatus,
+          carrier: carrier
+      );
+    } catch (e) {
+      print("Lỗi API: $e");
+    } finally {
+      // Tắt Loading (Quan trọng: Phải dùng rootNavigator: true để tắt đúng cái dialog vừa hiện)
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+
+    // Xử lý kết quả
+    if (serverSuccess) {
+      try {
+        final updateData = {
+          'trangThai': newStatus,
+          'ngayCapNhat': DateTime.now()
+        };
+        if (carrier != null) {
+          updateData['donViVanChuyen'] = carrier;
+        }
+
+        // Cập nhật Firestore để App tự đổi màu ngay lập tức
+        await FirebaseFirestore.instance.collection('DonHang').doc(docId).update(updateData);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("✅ Đã cập nhật trạng thái: $newStatus"))
+          );
+        }
+      } catch (e) {
+        print("Lỗi Firebase: $e");
+      }
+    } else {
+      if (mounted) {
+        _showErrorDialog("Lỗi kết nối Server Visual Studio!\n\nKhông thể cập nhật SQL. Vui lòng kiểm tra Server.");
+      }
+    }
+  }
+
+  void _showShippingPopup(String docId, String orderCode) {
     String? selectedCarrier;
     final carriers = ["Giao Hàng Nhanh", "Viettel Post", "J&T Express", "Shopee Express"];
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Cập nhật vận chuyển"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(labelText: "Chọn đơn vị vận chuyển", border: OutlineInputBorder()),
-              items: carriers.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-              onChanged: (val) => selectedCarrier = val,
-            ),
-          ],
+        title: const Text("Chọn đơn vị vận chuyển"),
+        content: DropdownButtonFormField<String>(
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+          items: carriers.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+          onChanged: (val) => selectedCarrier = val,
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Hủy")),
           ElevatedButton(
-            onPressed: () async {
+            onPressed: () {
               if (selectedCarrier != null) {
                 Navigator.pop(ctx);
-
-                // Tương tự: Gọi API Push lên trước
-                bool success = await AdminApiService.pushOrderStatus(
-                    orderId: orderCode,
-                    status: "Đang giao",
-                    carrier: selectedCarrier
-                );
-
-                if (!success) {
-                  // Fallback nếu lỗi
-                  FirebaseFirestore.instance.collection('DonHang').doc(docId).update({
-                    'trangThai': 'Đang giao',
-                    'donViVanChuyen': selectedCarrier,
-                    'isSync': false
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("⚠️ Server lỗi. Đã lưu offline.")));
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("✅ Đã chuyển sang Đang giao")));
-                }
+                // Gọi hàm xử lý chung
+                _processUpdate(docId, orderCode, 'Đang giao', selectedCarrier);
               }
             },
             child: const Text("Xác nhận"),
@@ -304,10 +310,21 @@ class _AdminOrderScreenState extends State<AdminOrderScreen> with SingleTickerPr
     );
   }
 
-  void _updateStatus(String docId, String newStatus) {
-    FirebaseFirestore.instance.collection('DonHang').doc(docId).update({
-      'trangThai': newStatus,
-      'isSync': false // Trigger Backend
-    });
+  void _showErrorDialog(String msg) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Lỗi hệ thống", style: TextStyle(color: Colors.red)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 50, color: Colors.red),
+            const SizedBox(height: 10),
+            Text(msg, textAlign: TextAlign.center),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Đóng"))],
+      ),
+    );
   }
 }
