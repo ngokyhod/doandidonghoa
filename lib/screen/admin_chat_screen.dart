@@ -22,11 +22,9 @@ class _AdminChatScreenState extends State<AdminChatScreen> {
 
     return Consumer(
       builder: (context, ref, child) {
-        // --- SỬA LỖI PHÂN QUYỀN ADMIN ---
         final String currentEmail = _currentUser?.email?.trim().toLowerCase() ?? '';
         final bool isAdmin = currentEmail == 'phanthuky12@gmail.com';
 
-        // Admin: lấy UID từ Provider. Khách: lấy UID của chính mình
         final String? roomId = isAdmin
             ? ref.watch(selectedChatUserProvider)
             : _currentUser?.uid;
@@ -119,6 +117,7 @@ class _AdminChatScreenState extends State<AdminChatScreen> {
     );
   }
 
+  // --- SỬA PHẦN NÀY ĐỂ TRÁNH BỊ CHATBOT ĐÈ ---
   Widget _buildInputArea(String roomId, bool isAdmin) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -134,14 +133,28 @@ class _AdminChatScreenState extends State<AdminChatScreen> {
                   filled: true,
                   fillColor: Colors.grey.shade100,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(25), borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 ),
+                minLines: 1,
+                maxLines: 3, // Cho phép nhập nhiều dòng
               ),
             ),
             const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.send, color: Colors.green),
-              onPressed: () => _sendMessage(roomId, isAdmin),
+
+            // Nút gửi tin nhắn
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.green.shade600,
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                onPressed: () => _sendMessage(roomId, isAdmin),
+              ),
             ),
+
+            // --- QUAN TRỌNG: Thêm khoảng trống 70px bên phải để né nút Chatbot ---
+            const SizedBox(width: 70),
           ],
         ),
       ),
@@ -153,18 +166,18 @@ class _AdminChatScreenState extends State<AdminChatScreen> {
     if (text.isEmpty) return;
     _controller.clear();
 
-    // 1. Gửi tin nhắn vào đúng phòng chat (UID của khách hàng)
+    // 1. Gửi tin nhắn
     await FirebaseFirestore.instance.collection('chat_rooms').doc(roomId).collection('messages').add({
       'text': text,
       'senderId': _currentUser?.uid,
       'timestamp': FieldValue.serverTimestamp(),
     });
 
-    // 2. Cập nhật phòng chat: Admin gửi -> Tắt chuông, Khách gửi -> Bật chuông
+    // 2. Cập nhật trạng thái phòng chat
     await FirebaseFirestore.instance.collection('chat_rooms').doc(roomId).set({
       'lastMessage': text,
       'lastMessageTime': FieldValue.serverTimestamp(),
-      'unreadByAdmin': !isAdmin, // Nếu không phải admin thì bật cờ chưa đọc
+      'unreadByAdmin': !isAdmin,
     }, SetOptions(merge: true));
   }
 }

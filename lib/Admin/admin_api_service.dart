@@ -95,7 +95,40 @@ class AdminApiService {
       return false; // Trả về false để UI biết đường xử lý fallback
     }
   }
+  static Future<bool> updateScrapStatus({
+    required String requestId,
+    required String status,
+    String? date,
+    double? weight,
+  }) async {
+    try {
+      // Gọi sang MobileApiController (ApiService.baseUrl)
+      final url = Uri.parse('${ApiService.baseUrl}/update-scrap-status');
 
+      // KHAI BÁO RÕ LÀ Map<String, dynamic> ĐỂ CHỨA ĐƯỢC SỐ VÀ CHUỖI
+      final Map<String, dynamic> bodyData = {
+        "requestId": requestId,
+        "status": status,
+      };
+
+      if (date != null) bodyData["date"] = date;
+      if (weight != null) bodyData["actualWeight"] = weight;
+
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(bodyData),
+      );
+
+      if (response.statusCode != 200) {
+        print("❌ Server Error: ${response.body}");
+      }
+      return response.statusCode == 200;
+    } catch (e) {
+      print("❌ Lỗi API Thu Gom: $e");
+      return false;
+    }
+  }
   // 4. Danh sách thu gom
   static Future<List<dynamic>> getCollections() async {
     try {
