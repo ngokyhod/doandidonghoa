@@ -37,22 +37,28 @@ class AdminApiService {
   static Future<bool> pushOrderStatus({
     required String orderId,
     required String status,
-    String? carrier
+    String? carrier,
+    double? quantity, // <--- THÊM THAM SỐ NÀY
   }) async {
     try {
       final url = Uri.parse('${ApiService.baseUrl}/update-order-status');
 
+      // Tạo body
+      final Map<String, dynamic> body = {
+        "maDonHang": orderId,
+        "trangThai": status,
+        "donViVanChuyen": carrier
+      };
+
+      // Nếu có số lượng thì gửi kèm
+      if (quantity != null) {
+        body["khoiLuongThucTe"] = quantity;
+      }
+
       final response = await http.post(
         url,
-        headers: {
-          "Content-Type": "application/json",
-          // "Authorization": "Bearer $token", // Nếu có bảo mật
-        },
-        body: jsonEncode({
-          "maDonHang": orderId,        // Phải khớp với DTO C#
-          "trangThai": status,         // Phải khớp với DTO C#
-          "donViVanChuyen": carrier    // (Tuỳ chọn)
-        }),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
       );
 
       if (response.statusCode == 200) {
@@ -64,7 +70,7 @@ class AdminApiService {
       }
     } catch (e) {
       print("⚠️ Lỗi kết nối tới Visual Studio: $e");
-      return false; // Trả về false để UI biết đường xử lý fallback
+      return false;
     }
   }
   static Future<bool> updateScrapStatus({

@@ -100,21 +100,19 @@ class _CreateScrapCollectionRequestScreenState extends State<CreateScrapCollecti
     setState(() => _isSubmitting = true);
 
     try {
-      // GỌI DUY NHẤT HÀM NÀY: Nó sẽ tự lo việc lưu Firestore (có isSync) và push SQL
+      // Gọi Service (KHÔNG TRUYỀN mYeuCau nữa)
       bool success = await ThuGomService.createThuGomRequest(
+        // mYeuCau: ...,  <-- BỎ DÒNG NÀY
         uid: user.uid,
         hoTen: _nameController.text.trim(),
         sdt: _phoneController.text.trim(),
         diaChiCuThe: _addressController.text.trim(),
-
         maTinh: _selectedCityModel?.code ?? "",
         maQuan: _selectedDistrictModel?.code ?? "",
         maXa: _selectedWardModel?.code ?? "",
-
         tenSP: _selectedProduct?.title ?? "",
         loaiSP: _selectedCategory ?? "",
-        productId: _selectedProduct?.id ?? "", // Truyền thêm ID sản phẩm
-
+        productId: _selectedProduct?.id ?? "",
         khoiLuong: double.tryParse(_weightController.text) ?? 0,
         giaMongMuon: double.tryParse(_priceController.text) ?? 0,
         doAm: _moistureValue,

@@ -55,10 +55,7 @@ final _router = GoRouter(
 
         // 2. Thu gom (Hoặc Chatbot tùy bạn sắp xếp)
         GoRoute(path: '/create_scrap_collection_request', builder: (context, state) => const CreateScrapCollectionRequestScreen()),
-        GoRoute(
-          path: '/admin',
-          builder: (context, state) => const AdminMainScreen(),
-        ),
+
         // 3. Quét phụ phẩm (Nút Giữa)
         GoRoute(path: '/create_scrap_collection_request', builder: (context, state) => const CreateScrapCollectionRequestScreen()),
         GoRoute(
@@ -83,6 +80,10 @@ final _router = GoRouter(
         GoRoute(path: '/owner_dashboard', builder: (context, state) => const OwnerDashboardScreen()),
         GoRoute(path: '/admin_chat', builder: (context, state) => const AdminChatScreen()),
       ],
+    ),
+    GoRoute(
+      path: '/admin',
+      builder: (context, state) => const AdminMainScreen(),
     ),
     GoRoute(
       path: '/cart',

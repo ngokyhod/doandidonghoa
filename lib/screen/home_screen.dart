@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+// import 'package:cached_network_image/cached_network_image.dart'; // Bỏ comment nếu dùng thư viện này
 import '../model/product_model.dart';
 import '../service/Product_Service.dart';
 import '../service/sync_service.dart';
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -19,7 +20,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final PageController _bannerController = PageController();
   int _currentBannerIndex = 0;
   Timer? _bannerTimer;
-  final PageController _newsController = PageController(viewportFraction: 0.35);
+  final PageController _newsController = PageController(viewportFraction: 0.85); // Chỉnh lại viewport cho tin tức dễ nhìn hơn
 
   late Future<List<Product>> _featuredProductsFuture;
 
@@ -30,22 +31,27 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _startBannerAutoPlay();
     _featuredProductsFuture = ProductService.fetchProducts();
     _loadSuggestions();
+    // Gọi đồng bộ dữ liệu nền
     SyncService.syncAll();
   }
+
   Future<void> _refreshData() async {
     setState(() {
       _featuredProductsFuture = ProductService.fetchProducts();
+      _loadSuggestions(); // Load lại cả banner và gợi ý
     });
   }
+
   void _loadSuggestions() async {
-    // Lấy tất cả sản phẩm về chỉ để lấy tên
+    // Lấy tất cả sản phẩm về chỉ để lấy tên và ảnh banner
     var products = await ProductService.fetchProducts();
     if (mounted) {
       setState(() {
         _productSuggestions = products.map((e) => e.title).toSet().toList();
+
+        // 1. Thử lấy ảnh từ sản phẩm làm banner
         if (products.isNotEmpty) {
           _bannerImageUrls = products
               .where((p) => p.imageUrls.isNotEmpty)
@@ -53,37 +59,36 @@ class _HomeScreenState extends State<HomeScreen> {
               .map((p) => p.imageUrls.first)
               .toList();
         }
+
+        // 2. Nếu không có ảnh sản phẩm, dùng ảnh mẫu đẹp (Unsplash)
         if (_bannerImageUrls.isEmpty) {
           _bannerImageUrls = [
-            'https://picsum.photos/800/400?sig=1',
-            'https://picsum.photos/800/400?sig=2',
-            'https://picsum.photos/800/400?sig=3',
+            'https://images.unsplash.com/photo-1625246333195-551e5415842d?q=80&w=1000&auto=format&fit=crop', // Ruộng lúa
+            'https://images.unsplash.com/photo-1585314062340-f1a5a7c9328d?q=80&w=1000&auto=format&fit=crop', // Gỗ/Sinh khối
+            'https://images.unsplash.com/photo-1542601906990-b4d3fb7d5c73?q=80&w=1000&auto=format&fit=crop', // Mầm cây
           ];
         }
         _startBannerAutoPlay();
       });
-
-      }
+    }
   }
 
+  void _startBannerAutoPlay() {
+    _bannerTimer?.cancel();
+    _bannerTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (_bannerController.hasClients && _bannerImageUrls.isNotEmpty) {
+        int nextPageIndex = (_currentBannerIndex + 1) % _bannerImageUrls.length;
+        _bannerController.animateToPage(
+          nextPageIndex,
+          duration: const Duration(milliseconds: 800),
+          curve: Curves.fastOutSlowIn,
+        );
+      }
+    });
+  }
 
-
-void _startBannerAutoPlay() {
-  _bannerTimer?.cancel();
-  _bannerTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-    if (_bannerController.hasClients && _bannerImageUrls.isNotEmpty) {
-      int nextPageIndex = (_currentBannerIndex + 1) % _bannerImageUrls.length;
-      _bannerController.animateToPage(
-        nextPageIndex,
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOut,
-      );
-    }
-  });
-}
   @override
   void dispose() {
-
     _bannerController.dispose();
     _newsController.dispose();
     _bannerTimer?.cancel();
@@ -107,60 +112,60 @@ void _startBannerAutoPlay() {
     return Scaffold(
       backgroundColor: const Color(0xFFF9FBE7), // Màu nền xanh cốm nhạt
       body: SafeArea(
-        child: RefreshIndicator( // <--- Bọc cái này ngoài SingleChildScrollView
-          onRefresh: _refreshData, // Gọi hàm reload khi kéo xuống
+        child: RefreshIndicator(
+          onRefresh: _refreshData,
           color: Colors.green,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Header (Có User Avatar mới)
-              _buildHeader(context),
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. Header (Search + User Avatar)
+                _buildHeader(context),
 
-              // 2. Tiện ích
-              _buildUtilityGrid(),
-              const SizedBox(height: 16),
+                // 2. Tiện ích (Grid Icon)
+                _buildUtilityGrid(),
+                const SizedBox(height: 16),
 
-              // 3. Banner
-              _buildBannerSection(),
-              const SizedBox(height: 24),
+                // 3. Banner Slider
+                _buildBannerSection(),
+                const SizedBox(height: 24),
 
-              // 4. Sản phẩm nổi bật
-              _buildSectionTitle("Phụ phẩm nổi bật", onTap: () => context.push('/products')),
-              _buildFeaturedProducts(),
+                // 4. Sản phẩm nổi bật
+                _buildSectionTitle("Phụ phẩm nổi bật", onTap: () => context.push('/products')),
+                _buildFeaturedProducts(),
 
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              // 5. Quy trình giao dịch
-              _buildSectionTitle("Quy trình giao dịch"),
-              _buildTransactionProcessSection(),
+                // 5. Quy trình giao dịch
+                _buildSectionTitle("Quy trình giao dịch"),
+                _buildTransactionProcessSection(),
 
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              // 6. Tin tức
-              _buildSectionTitle("Tin tức nông nghiệp"),
-              _buildNewsCarouselSection(),
+                // 6. Tin tức
+                _buildSectionTitle("Tin tức nông nghiệp"),
+                _buildNewsCarouselSection(),
 
-              const SizedBox(height: 40),
-            ],
+                const SizedBox(height: 40),
+              ],
+            ),
           ),
-        ),
         ),
       ),
     );
   }
 
   // --------------------------------------------------------------------------
-  // WIDGET CON: HEADER (CÓ USER AVATAR)
+  // WIDGET CON: HEADER
   // --------------------------------------------------------------------------
-
   Widget _buildHeader(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       color: Colors.white,
       child: Row(
         children: [
-          // 1. THANH TÌM KIẾM CÓ GỢI Ý (Giữ nguyên code Autocomplete của bạn)
+          // 1. THANH TÌM KIẾM
           Expanded(
             child: Container(
               height: 45,
@@ -242,9 +247,9 @@ void _startBannerAutoPlay() {
 
           const SizedBox(width: 12),
 
-          // --- 2. PHẦN MỚI THÊM LẠI: USER ICON (StreamBuilder) ---
+          // 2. USER AVATAR (StreamBuilder)
           StreamBuilder<User?>(
-            stream: FirebaseAuth.instance.authStateChanges(), // Lắng nghe trạng thái đăng nhập
+            stream: FirebaseAuth.instance.authStateChanges(),
             builder: (context, snapshot) {
               final user = snapshot.data;
               final isLoggedIn = user != null;
@@ -262,9 +267,7 @@ void _startBannerAutoPlay() {
                   height: 40,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    // Nền: Chưa đăng nhập thì trong suốt, Đăng nhập rồi thì xanh nhạt
                     color: isLoggedIn ? Colors.green.withOpacity(0.1) : Colors.transparent,
-                    // Viền: Chưa đăng nhập -> Xám nhạt, Đăng nhập -> Xanh
                     border: Border.all(
                         color: isLoggedIn ? Colors.green : Colors.grey.shade400,
                         width: 1.5
@@ -287,13 +290,12 @@ void _startBannerAutoPlay() {
               );
             },
           ),
-          // ----------------------------------------------------------
 
           const SizedBox(width: 8),
 
           IconButton(
             icon: const Icon(Icons.favorite_border, color: Colors.green, size: 28),
-            onPressed: () => _checkLoginAndGo('/profile'),
+            onPressed: () => _checkLoginAndGo('/profile'), // Tạm trỏ về profile
           ),
 
           IconButton(
@@ -306,14 +308,13 @@ void _startBannerAutoPlay() {
   }
 
   // --------------------------------------------------------------------------
-  // CÁC WIDGET CON KHÁC
+  // TIỆN ÍCH, BANNER, SẢN PHẨM...
   // --------------------------------------------------------------------------
 
   Widget _buildUtilityGrid() {
     final List<Map<String, dynamic>> utilities = [
       {'icon': Icons.recycling, 'label': 'Thu gom', 'route': '/create_scrap_collection_request', 'color': Colors.green},
-
-      {'icon': Icons.chat, 'label': 'CSKH', 'route': '/admin_chat', 'color': Colors.orange},
+      {'icon': Icons.chat, 'label': 'CSKH', 'route': '/chatbot', 'color': Colors.orange}, // Sửa lại route CSKH
       {'icon': Icons.spa, 'label': 'Phụ phẩm', 'route': '/products', 'color': Colors.purple},
     ];
 
@@ -327,7 +328,11 @@ void _startBannerAutoPlay() {
           return GestureDetector(
             onTap: () {
               if (item['route'] != null) {
-                _checkLoginAndGo(item['route']);
+                if (item['route'] == '/chatbot') {
+                  context.push('/chatbot'); // Vào thẳng Chatbot không cần login
+                } else {
+                  _checkLoginAndGo(item['route']);
+                }
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Tính năng đang phát triển")));
               }
@@ -356,6 +361,7 @@ void _startBannerAutoPlay() {
   }
 
   Widget _buildBannerSection() {
+    if (_bannerImageUrls.isEmpty) return const SizedBox.shrink();
     return Column(
       children: [
         SizedBox(
@@ -365,14 +371,24 @@ void _startBannerAutoPlay() {
             itemCount: _bannerImageUrls.length,
             onPageChanged: (index) => setState(() => _currentBannerIndex = index),
             itemBuilder: (_, index) {
+              final imgUrl = _bannerImageUrls[index];
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: Colors.grey[300]),
+                decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.grey[300]
+                ),
                 clipBehavior: Clip.antiAlias,
-                child: Image.asset(
-                  _bannerImageUrls[index],
+                child: imgUrl.startsWith('http')
+                    ? Image.network( // Dùng Image.network cho link web
+                  imgUrl,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.broken_image)),
+                )
+                    : Image.asset( // Dùng Image.asset cho ảnh trong máy
+                  imgUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.image_not_supported)),
                 ),
               );
             },
@@ -485,50 +501,19 @@ void _startBannerAutoPlay() {
 
   Widget _buildNewsCarouselSection() {
     final List<Map<String, String>> news = List.generate(8, (index) => {
-      'title': 'Giá lúa gạo hôm nay tăng mạnh $index',
+      'title': 'Giá lúa gạo hôm nay tăng mạnh - Tin số ${index + 1}',
       'date': '${index + 1}/12/2025'
     });
 
     return SizedBox(
-      height: 160,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          PageView.builder(
-            controller: _newsController,
-            itemCount: news.length,
-            padEnds: false,
-            itemBuilder: (context, index) {
-              return _buildNewsItem(news[index]);
-            },
-          ),
-          Positioned(
-            left: 0,
-            child: CircleAvatar(
-              backgroundColor: Colors.white.withOpacity(0.9),
-              radius: 18,
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new, size: 16, color: Colors.black87),
-                onPressed: () {
-                  _newsController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-                },
-              ),
-            ),
-          ),
-          Positioned(
-            right: 0,
-            child: CircleAvatar(
-              backgroundColor: Colors.white.withOpacity(0.9),
-              radius: 18,
-              child: IconButton(
-                icon: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.black87),
-                onPressed: () {
-                  _newsController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-                },
-              ),
-            ),
-          ),
-        ],
+      height: 120, // Giảm chiều cao cho gọn
+      child: PageView.builder(
+        controller: _newsController,
+        itemCount: news.length,
+        padEnds: false,
+        itemBuilder: (context, index) {
+          return _buildNewsItem(news[index]);
+        },
       ),
     );
   }
@@ -539,8 +524,8 @@ void _startBannerAutoPlay() {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Đọc tin: ${item['title']}")));
       },
       child: Container(
-        margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4, left: 4),
-        padding: const EdgeInsets.all(8),
+        margin: const EdgeInsets.only(right: 12, top: 4, bottom: 4, left: 16),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(10),
@@ -548,22 +533,28 @@ void _startBannerAutoPlay() {
             BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
+            Container(
+              width: 80,
+              decoration: BoxDecoration(
+                color: Colors.green.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Center(child: Icon(Icons.newspaper, color: Colors.green, size: 40)),
+            ),
+            const SizedBox(width: 12),
             Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Center(child: Icon(Icons.newspaper, color: Colors.grey)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(item['title']!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text(item['date']!, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(item['title']!, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Text(item['date']!, style: const TextStyle(fontSize: 10, color: Colors.grey)),
           ],
         ),
       ),
@@ -634,70 +625,70 @@ void _startBannerAutoPlay() {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-        Expanded(
-        child: ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-      child: product.imageUrls.isNotEmpty
-          ? Image.network(
-        product.imageUrls.first,
-        width: double.infinity,
-        fit: BoxFit.cover,
-        errorBuilder: (_,__,___) => Container(
-            color: Colors.grey[200],
-            child: const Center(child: Icon(Icons.image_not_supported))
-        ),
-      )
-          : Container(
-          color: Colors.green.withOpacity(0.1),
-          child: const Center(child: Icon(Icons.grass, color: Colors.green))
-      ),
-    ),
-    ),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                child: product.imageUrls.isNotEmpty
+                    ? Image.network(
+                  product.imageUrls.first,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                      color: Colors.grey[200],
+                      child: const Center(child: Icon(Icons.image_not_supported))),
+                )
+                    : Container(
+                    color: Colors.green.withOpacity(0.1),
+                    child: const Center(child: Icon(Icons.grass, color: Colors.green))),
+              ),
+            ),
 
-    // 2. Thông tin chi tiết
-    Padding(
-    padding: const EdgeInsets.all(8.0),
-    child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-    // Tên sản phẩm
-    Text(
-    product.title,
-    maxLines: 2,
-    overflow: TextOverflow.ellipsis,
-    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)
-    ),
-    const SizedBox(height: 4),
+            // 2. Thông tin chi tiết
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Tên sản phẩm
+                  Text(
+                      product.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)
+                  ),
+                  const SizedBox(height: 4),
 
-    // Giá tiền
-    Text(
-    formatCurrency.format(product.price),
-    style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13)
-    ),
+                  // Giá tiền
+                  Text(
+                      formatCurrency.format(product.price),
+                      style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13)
+                  ),
 
-    const SizedBox(height: 4),
+                  const SizedBox(height: 4),
 
-    // --- MỚI: HIỂN THỊ TỒN KHO ---
-    Row(
-    children: [
-    Icon(
-    Icons.inventory_2_outlined,
-    size: 12,
-    color: isOutOfStock ? Colors.red : Colors.grey[600]
-    ),
-    const SizedBox(width: 4),
-    Text(
-    isOutOfStock
-    ? "Hết hàng"
-        : "Kho: ${product.stockQuantity} ${product.unit}",
-    style: TextStyle(
-    fontSize: 11,
-    fontWeight: isOutOfStock ? FontWeight.bold : FontWeight.normal,
-    color: isOutOfStock ? Colors.red : Colors.grey[700],
-    ),
-    ),
-    ],
-    )   ]),
+                  // --- HIỂN THỊ TỒN KHO ---
+                  Row(
+                    children: [
+                      Icon(
+                          Icons.inventory_2_outlined,
+                          size: 12,
+                          color: isOutOfStock ? Colors.red : Colors.grey[600]
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        isOutOfStock
+                            ? "Hết hàng"
+                            : "Kho: ${product.stockQuantity} ${product.unit}",
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: isOutOfStock ? FontWeight.bold : FontWeight.normal,
+                          color: isOutOfStock ? Colors.red : Colors.grey[700],
+                        ),
+                      ),
+                    ],
+                  )
+                ],
+              ),
             ),
           ],
         ),

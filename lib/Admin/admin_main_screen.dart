@@ -9,7 +9,7 @@ import 'admin_xnk_screen.dart';
 import 'owner_dashboard_screen.dart';
 import 'widgets/admin_notification_bell.dart';
 import '../service/sync_service.dart';
-import '../screen/admin_chat_screen.dart'; // <--- 1. IMPORT MÀN HÌNH CHAT
+import '../screen/admin_chat_screen.dart'; // <--- 1. NHỚ IMPORT MÀN HÌNH CHAT
 
 class AdminMainScreen extends ConsumerWidget {
   const AdminMainScreen({super.key});
@@ -20,26 +20,40 @@ class AdminMainScreen extends ConsumerWidget {
 
     // Danh sách các màn hình con
     final List<Widget> pages = [
-      const OwnerDashboardScreen(), // 0: Dashboard
-      const AdminProductScreen(),   // 1: Sản phẩm
-      const AdminOrderScreen(),     // 2: Đơn hàng
-      const AdminXNKScreen(),       // 3: Kho & Thu gom
-      const AdminUsersScreen(),     // 4: Khách hàng
-      const AdminChatScreen(),      // 5: Chat (ĐÃ THÊM VÀO ĐÂY)
+      const OwnerDashboardScreen(), // Index 0
+      const AdminProductScreen(),   // Index 1
+      const AdminOrderScreen(),     // Index 2
+      const AdminXNKScreen(),       // Index 3
+      const AdminUsersScreen(),     // Index 4
+      const AdminChatScreen(),      // Index 5 <--- 2. THÊM DÒNG NÀY ĐỂ KHẮC PHỤC LỖI
     ];
+
+    // Xác định đang ở màn hình Chat hay không để ẩn hiện UI phù hợp
+    bool isChatScreen = currentTab == 5;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6F9),
       appBar: AppBar(
         backgroundColor: Colors.green.shade700,
         elevation: 0,
-        // Khi ở màn hình Chat (Tab 5), đổi tiêu đề AppBar
-        title: currentTab == 5
+        // Nếu đang ở màn hình Chat, đổi tiêu đề và hiện nút Back
+        title: isChatScreen
             ? const Text("Hỗ trợ khách hàng", style: TextStyle(color: Colors.white, fontSize: 18))
             : const SizedBox.shrink(),
+        leading: isChatScreen
+            ? IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            // Quay lại màn hình Users (Tab 4)
+            ref.read(adminTabProvider.notifier).setTab(4);
+            // Hoặc xóa user đang chọn để reset chat
+            // ref.read(selectedChatUserProvider.notifier).clear();
+          },
+        )
+            : null,
         actions: [
-          // Nút đồng bộ (Chỉ hiện khi không phải màn hình Chat)
-          if (currentTab != 5)
+          // Ẩn nút đồng bộ khi đang Chat cho đỡ rối
+          if (!isChatScreen)
             IconButton(
               icon: const Icon(Icons.sync, color: Colors.white),
               tooltip: "Đồng bộ dữ liệu SQL",
@@ -60,22 +74,16 @@ class AdminMainScreen extends ConsumerWidget {
           const AdminNotificationBell(),
           const SizedBox(width: 16),
         ],
-        // Nếu ở màn hình chat, thêm nút Back để quay lại danh sách User
-        leading: currentTab == 5
-            ? IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => ref.read(adminTabProvider.notifier).setTab(4), // Quay về tab Khách hàng
-        )
-            : null,
       ),
 
+      // IndexedStack giữ trạng thái của các màn hình
       body: IndexedStack(
         index: currentTab,
         children: pages,
       ),
 
-      // Ẩn thanh menu dưới đáy khi đang Chat để có không gian gõ phím
-      bottomNavigationBar: currentTab == 5
+      // Ẩn BottomBar khi vào màn hình Chat để có không gian gõ phím
+      bottomNavigationBar: isChatScreen
           ? null
           : BottomNavigationBar(
         currentIndex: currentTab,
@@ -88,7 +96,7 @@ class AdminMainScreen extends ConsumerWidget {
           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Thống kê'),
           BottomNavigationBarItem(icon: Icon(Icons.inventory_2), label: 'Sản phẩm'),
           BottomNavigationBarItem(icon: Icon(Icons.shopping_bag), label: 'Đơn hàng'),
-          BottomNavigationBarItem(icon: Icon(Icons.warehouse), label: 'Kho/Thu gom'),
+          BottomNavigationBarItem(icon: Icon(Icons.warehouse), label: 'Kho/XNK'),
           BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Khách hàng'),
         ],
       ),

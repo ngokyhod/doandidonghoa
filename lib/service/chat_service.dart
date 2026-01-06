@@ -7,7 +7,7 @@ import 'package:image_picker/image_picker.dart';
 class ChatService {
   // Đồng bộ URL với ProductService (tự động chọn 10.0.2.2 hoặc localhost)
   static String get baseUrl {
-    if (kIsWeb) return 'http://10.10.178.244:5000';
+    if (kIsWeb) return 'http://192.168.1.131:5000';
     return 'http://192.168.1.131:5000'; // Dùng 10.0.2.2 cho Android Emulator
   }
 

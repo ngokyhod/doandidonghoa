@@ -10,6 +10,7 @@ class ThuGomService {
   }
 
   static Future<bool> createThuGomRequest({
+    // ❌ BỎ tham số mYeuCau ở đây đi
     required String uid,
     required String hoTen,
     required String sdt,
@@ -19,15 +20,17 @@ class ThuGomService {
     required String maXa,
     required String tenSP,
     required String loaiSP,
-    required String productId, // Thêm productId để đồng bộ
+    required String productId,
     required double khoiLuong,
     required double giaMongMuon,
     required double doAm,
     required String ghiChu,
     List<String>? hinhAnh,
   }) async {
-    // 1. CHUẨN BỊ DỮ LIỆU SQL
+
+    // 1. CHUẨN BỊ DỮ LIỆU GỬI SQL (Không gửi M_YeuCau, để SQL tự tạo)
     final Map<String, dynamic> sqlData = {
+      // "M_YeuCau": ..., // <-- KHÔNG GỬI CÁI NÀY
       "UserId": uid,
       "HoTen": hoTen,
       "SoDienThoai": sdt,
@@ -35,6 +38,7 @@ class ThuGomService {
       "MaTinh": maTinh, "MaQuan": maQuan, "MaXa": maXa,
       "TenSanPham": tenSP,
       "LoaiSanPham": loaiSP,
+      "ProductId": productId,
       "KhoiLuong": khoiLuong,
       "GiaMongMuon": giaMongMuon,
       "DoAm": doAm,
@@ -45,8 +49,9 @@ class ThuGomService {
       "DonViTinh": "KG"
     };
 
-    // 2. CHUẨN BỊ DỮ LIỆU FIREBASE (MẶC ĐỊNH LÀ CHƯA SYNC)
+    // Chuẩn bị sẵn Map cho Firebase
     final Map<String, dynamic> firebaseData = {
+      'm_YeuCau': '', // Tạm thời để trống, chờ Server trả về
       'uid': uid,
       'contactName': hoTen,
       'contactPhone': sdt,
@@ -61,32 +66,42 @@ class ThuGomService {
       'moTa': ghiChu,
       'trangThaiXuLy': 'ChoDongBo',
       'createdAt': FieldValue.serverTimestamp(),
-
-      // CỜ QUAN TRỌNG
       'isSync': false,
       'sqlPayload': jsonEncode(sqlData)
     };
 
     try {
-      print("🚀 [ThuGom] Đang thử gửi tới SQL...");
+      print("🚀 [ThuGom] Đang gửi lên SQL để lấy mã...");
       final response = await http.post(
         Uri.parse('$baseUrl/tao-yeu-cau-thu-gom'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(sqlData),
-      ).timeout(const Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        // --- NẾU SQL THÀNH CÔNG ---
-        firebaseData['isSync'] = true;
-        firebaseData['trangThaiXuLy'] = 'MoiYeuCau'; // Trạng thái đã lên SQL
-        firebaseData.remove('sqlPayload'); // Xóa payload vì đã sync xong
-        print("✅ SQL ThuGom thành công.");
+        // ✅ THÀNH CÔNG: Server sẽ trả về object chứa mã
+        // Giả sử server trả về JSON: { "m_YeuCau": "REQ_12345", "status": "success" ... }
+        final responseBody = jsonDecode(response.body);
+
+        // LẤY MÃ TỪ SERVER TRẢ VỀ
+        // Bạn cần check xem API C# trả về key tên là gì (ví dụ: 'id', 'm_YeuCau', 'data'...)
+        String serverId = responseBody['m_YeuCau'] ?? responseBody['id'] ?? responseBody['maYeuCau'] ?? '';
+
+        if (serverId.isNotEmpty) {
+          firebaseData['m_YeuCau'] = serverId; // Cập nhật mã thật vào đây
+          firebaseData['isSync'] = true;       // Đã đồng bộ
+          firebaseData['trangThaiXuLy'] = 'MoiYeuCau';
+          firebaseData.remove('sqlPayload');   // Xóa payload thừa
+          print("✅ Đã nhận mã từ Server: $serverId");
+        }
+      } else {
+        print("⚠️ Server trả lỗi: ${response.body}");
       }
     } catch (e) {
-      print("⚠️ Lỗi kết nối SQL: $e. Lưu Firestore ở chế độ Chờ đồng bộ.");
+      print("⚠️ Lỗi kết nối SQL: $e. Sẽ lưu tạm không có mã.");
     }
 
-    // 3. LUÔN LƯU VÀO FIREBASE
+    // 2. LƯU VÀO FIREBASE (Có mã nếu API thành công, hoặc rỗng nếu thất bại)
     try {
       await FirebaseFirestore.instance.collection('ThuGom').add(firebaseData);
       return true;
