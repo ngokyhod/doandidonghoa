@@ -44,20 +44,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       return;
     }
 
-    // 3. Kiểm tra giới hạn 1000kg
+    // 3. Kiểm tra giới hạn 1000kg (Tùy chọn, có thể xóa nếu muốn mua vô hạn)
     if (weight > 1000) {
       setState(() => _errorText = "Khối lượng quá lớn (Tối đa 1000kg)");
       return;
     }
 
-    // --- 4. (MỚI) KIỂM TRA TỒN KHO ---
-    // So sánh số lượng khách nhập với tồn kho thực tế
-    if (weight > widget.product.stockQuantity) {
-      setState(() {
-        _errorText = "Quá tồn kho (Chỉ còn ${widget.product.stockQuantity} ${widget.product.unit})";
-      });
-      return;
-    }
+    // --- ĐÃ XÓA PHẦN KIỂM TRA TỒN KHO Ở ĐÂY ---
 
     // 5. Thêm vào giỏ hàng và chuyển trang
     CartService.addToCart(widget.product, weight);
@@ -106,7 +99,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
             const SizedBox(height: 8),
 
-            // --- (MỚI) HIỂN THỊ TỒN KHO ---
+            // Hiển thị tồn kho (Vẫn để lại để khách xem, nhưng không chặn)
             Row(
               children: [
                 const Icon(Icons.inventory_2_outlined, size: 18, color: Colors.blueGrey),
@@ -135,25 +128,24 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 hintText: "Ví dụ: 10.5",
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 suffixText: "kg",
-                errorText: _errorText, // Hiển thị lỗi tồn kho ở đây
+                errorText: _errorText,
               ),
             ),
             const SizedBox(height: 24),
 
-            // Nút Thêm vào giỏ
+            // Nút Thêm vào giỏ (LUÔN BẬT)
             SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton.icon(
-                // Nếu hết hàng thì vô hiệu hóa nút bấm
-                onPressed: widget.product.stockQuantity > 0 ? _addToCart : null,
+                onPressed: _addToCart, // Luôn cho phép nhấn
                 icon: const Icon(Icons.add_shopping_cart, color: Colors.white),
-                label: Text(
-                  widget.product.stockQuantity > 0 ? "Thêm vào giỏ hàng" : "Hết hàng",
-                  style: const TextStyle(fontSize: 18, color: Colors.white),
+                label: const Text(
+                  "Thêm vào giỏ hàng",
+                  style: TextStyle(fontSize: 18, color: Colors.white),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: widget.product.stockQuantity > 0 ? Colors.green : Colors.grey,
+                  backgroundColor: Colors.green, // Luôn hiện màu xanh
                 ),
               ),
             ),
