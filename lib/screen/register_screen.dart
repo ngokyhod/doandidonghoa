@@ -2,7 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
-import '../service/ApiService.dart'; // Đảm bảo import đúng
+import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Thêm thư viện két sắt
+import '../service/ApiService.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -17,14 +18,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _confirmPassCtrl = TextEditingController();
+
   bool _isLoading = false;
+
+  // Khởi tạo két sắt bảo mật
+  final _storage = const FlutterSecureStorage();
 
   Future<void> _handleRegister() async {
     // --- 1. LẤY GIÁ TRỊ TỪ CONTROLLER ---
     final email = _emailCtrl.text.trim();
     final name = _nameCtrl.text.trim();
     final phone = _phoneCtrl.text.trim();
-    final pass = _passCtrl.text; // <--- KHAI BÁO BIẾN pass TẠI ĐÂY
+    final pass = _passCtrl.text;
     final confirmPass = _confirmPassCtrl.text;
 
     // --- 2. VALIDATE DỮ LIỆU ---
@@ -36,14 +41,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _showMsg("Mật khẩu không khớp", isError: true);
       return;
     }
-
-    // Kiểm tra tên có chữ viết hoa (Dùng biến 'name', không phải 'email')
     if (!RegExp(r'[A-ZÀ-Ỹ]').hasMatch(name)) {
-      _showMsg("Họ tên phải có ít nhất 1 chữ viết hoa (VD: Nguyen Van A)", isError: true);
+      _showMsg("Họ tên phải có ít nhất 1 chữ viết hoa", isError: true);
       return;
     }
-
-    // Chặn số/ký tự đặc biệt trong tên
     if (RegExp(r'[0-9!@#\$%^&*(),.?":{}|<>]').hasMatch(name)) {
       _showMsg("Họ tên không được chứa số hoặc ký tự đặc biệt", isError: true);
       return;
@@ -56,39 +57,60 @@ class _RegisterScreenState extends State<RegisterScreen> {
       // BƯỚC 1: TẠO TÀI KHOẢN FIREBASE AUTH
       final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
-        password: pass, // Biến 'pass' giờ đã hợp lệ
+        password: pass,
       );
 
       final user = userCredential.user;
       if (user != null) {
         final uid = user.uid;
 
-        // BƯỚC 2: LƯU VÀO FIREBASE FIRESTORE
+        // BƯỚC 2: LƯU FIREBASE FIRESTORE (OFFLINE FIRST)
+        // Mặc định isSync = false và có timestamp
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
           'uid': uid,
           'fullName': name,
           'email': email,
           'phone': phone,
           'role': 'KhachHang',
-          'createdAt': FieldValue.serverTimestamp(),
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
           'loginMethod': 'email',
+          'isSync': false, // Mặc định chưa đồng bộ
         });
         print("✅ Lưu Firestore thành công!");
 
-        // BƯỚC 3: GỌI API ĐỒNG BỘ SANG VISUAL (SQL SERVER)
-        // Truyền pass sang để Visual tạo user Identity tương ứng
-        bool synced = await ApiService.syncUserToBackend(uid, email, name, phone, pass);
+        // BƯỚC 3: CẤT MẬT KHẨU VÀO KÉT SẮT (Dự phòng Web sập)
+        // Lưu theo key có chứa UID để không bị nhầm lẫn giữa các tài khoản
+        await _storage.write(key: 'unsynced_pass_$uid', value: pass);
 
-        if (synced) {
-          _showMsg("Đăng ký & Đồng bộ thành công!");
-        } else {
-          _showMsg("Đăng ký App thành công (Lỗi tạo Web)", isError: true);
+        // BƯỚC 4: THỬ ĐỒNG BỘ LÊN WEB (ONLINE SYNC)
+        try {
+          bool synced = await ApiService.syncUserToBackend(uid, email, name, phone, pass);
+
+          if (synced) {
+            // 4.1: Nếu Web nhận thành công -> Cập nhật Firebase
+            await FirebaseFirestore.instance.collection('users').doc(uid).update({
+              'isSync': true,
+              'syncedAt': FieldValue.serverTimestamp(), // Timestamp đồng bộ thành công
+            });
+
+            // 4.2: XÓA MẬT KHẨU KHỎI KÉT SẮT NGAY LẬP TỨC
+            await _storage.delete(key: 'unsynced_pass_$uid');
+
+            _showMsg("Đăng ký & Đồng bộ Web thành công!");
+          } else {
+            // Lỗi logic từ Web (VD: Bị trùng email bên bảng SQL)
+            _showMsg("Đăng ký App thành công nhưng Web từ chối.", isError: true);
+          }
+        } catch (e) {
+          // BƯỚC 5: NẾU WEB SẬP HOẶC MẤT MẠNG RƠI VÀO ĐÂY
+          // Mật khẩu đã an toàn trong két, isSync vẫn đang là false.
+          _showMsg("Đăng ký thành công! Đang chờ đồng bộ lên Server...", isError: false);
         }
 
-        // Chuyển trang sau khi xong
+        // Chuyển trang sau 1 giây
         if (mounted) {
           await Future.delayed(const Duration(seconds: 1));
-          if (mounted) context.pop(); // Về Login
+          if (mounted) context.pop(); // Về trang trước
         }
       }
     } on FirebaseAuthException catch (e) {
@@ -109,10 +131,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // ... (Phần build giữ nguyên) ...
   @override
   Widget build(BuildContext context) {
-    // ... Copy phần build cũ vào đây ...
+    // ... Giữ nguyên Giao diện (Scaffold, AppBar, TextField...) của bạn ...
     return Scaffold(
       appBar: AppBar(title: const Text("Đăng ký tài khoản")),
       body: SingleChildScrollView(

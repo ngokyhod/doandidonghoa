@@ -66,22 +66,7 @@ class _AppShellState extends State<AppShell> {
           widget.child,
 
           // 2. Nút Chat bong bóng (Góc trên bên phải)
-          Positioned(
-            bottom: MediaQuery.of(context).padding.top + 10,
-            right: 16,
-            child: FloatingActionButton(
-              heroTag: 'chatbot_bubble',
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const ChatbotScreen()),
-                );
-              },
-              backgroundColor: const Color(0xFF0B84FF),
-              elevation: 10,
-              shape: const CircleBorder(),
-              child: const Icon(Icons.support_agent, color: Colors.white, size: 28),
-            ),
-          ),
+
         ],
       ),
 

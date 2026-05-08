@@ -2,8 +2,11 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Thêm thư viện két sắt
 
 class SyncService {
+  // Khởi tạo két sắt bảo mật
+  static const _storage = FlutterSecureStorage();
 
   // Cấu hình URL (Giống các Service khác)
   static String get baseUrl {
@@ -11,15 +14,96 @@ class SyncService {
     return 'http://10.0.2.2:5056/api/MobileApi';
   }
 
-  // Hàm gọi chung để chạy cả 2 tiến trình đồng bộ
+  // Hàm gọi chung để chạy tiến trình đồng bộ ngầm
   static Future<void> syncAll() async {
-    print("🔄 Bắt đầu tiến trình đồng bộ ngầm...");await syncPendingScrapRequests();
+    print("🔄 Bắt đầu tiến trình đồng bộ ngầm...");
+
+    // BƯỚC 1: ƯU TIÊN SYNC USER ĐẦU TIÊN
+    await syncPendingUsers();
+
+    // BƯỚC 2: SAU KHI SYNC USER XONG THÌ SYNC ĐƠN HÀNG & THU GOM
+    await syncPendingScrapRequests();
     await syncPendingOrders();
 
     print("✅ Kết thúc tiến trình đồng bộ.");
   }
 
+  // ==================================================================
+  // --- 0. ĐỒNG BỘ TÀI KHOẢN (USER) LÊN SQL ---
+  // ==================================================================
+  // --- 0. ĐỒNG BỘ TÀI KHOẢN (USER) LÊN SQL ---
+  static Future<void> syncPendingUsers() async {
+    try {
+      // B1: Lấy các user chưa đồng bộ, ưu tiên theo thời gian đăng ký (ai trước gửi trước)
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('isSync', isEqualTo: false)
+          .get();
+
+      if (snapshot.docs.isEmpty) return;
+
+      print("👤 Tìm thấy ${snapshot.docs.length} tài khoản cần đồng bộ...");
+
+      for (var doc in snapshot.docs) {
+        Map<String, dynamic> data = doc.data();
+        String uid = data['uid'] ?? doc.id;
+        String email = data['email'] ?? '';
+        String name = data['fullName'] ?? '';
+        String phone = data['phone'] ?? '';
+        String role = data['role'] ?? 'KhachHang';
+
+        // B2: Lấy mật khẩu từ két sắt (chỉ lưu cục bộ ở máy)
+        String? savedPass = await _storage.read(key: 'unsynced_pass_$uid');
+
+        if (savedPass != null) {
+          try {
+            // ==============================================================
+            // B3: TẠO PAYLOAD VÀ GỌI API (GIỐNG HỆT ĐƠN HÀNG VÀ THU GOM)
+            // ==============================================================
+            Map<String, dynamic> userPayload = {
+              'FirebaseUid': uid,
+              'Email': email,
+              'FullName': name,
+              'Phone': phone,
+              'Password': savedPass,
+              'Role': role
+            };
+
+            final response = await http.post(
+              Uri.parse('$baseUrl/sync-user'), // Trỏ thẳng vào API C# của bạn
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(userPayload),   // Ép sang chuỗi JSON
+            ).timeout(const Duration(seconds: 10));
+
+            // B4: XỬ LÝ KẾT QUẢ TỪ VISUAL STUDIO TRẢ VỀ
+            if (response.statusCode == 200) {
+              // Thành công -> Cập nhật Firebase isSync = true
+              await doc.reference.update({
+                'isSync': true,
+                'syncedAt': FieldValue.serverTimestamp(),
+              });
+
+              // QUAN TRỌNG: Đồng bộ xong phải xóa mật khẩu ngay để bảo mật
+              await _storage.delete(key: 'unsynced_pass_$uid');
+              print("✅ Đã đồng bộ Tài khoản lên SQL: $email");
+            } else {
+              print("❌ Lỗi API Tài khoản (${response.statusCode}): ${response.body}");
+            }
+          } catch (e) {
+            print("⏳ Lỗi kết nối Tài khoản (Web có thể đang sập): $e");
+          }
+        } else {
+          print("⚠️ User $uid chưa đồng bộ nhưng không tìm thấy pass trong máy. Bỏ qua.");
+        }
+      }
+    } catch (e) {
+      print("🔥 Lỗi hệ thống Sync Users: $e");
+    }
+  }
+
+  // ==================================================================
   // --- 1. ĐỒNG BỘ ĐƠN HÀNG (Checkout) ---
+  // ==================================================================
   static Future<void> syncPendingOrders() async {
     try {
       // B1: Lấy các đơn hàng chưa đồng bộ từ Firestore
@@ -34,6 +118,18 @@ class SyncService {
 
       for (var doc in snapshot.docs) {
         Map<String, dynamic> data = doc.data();
+
+        // -------------------------------------------------------------
+        // CHỐT CHẶN: Kiểm tra xem User của đơn này đã lên Web chưa?
+        // -------------------------------------------------------------
+        String uid = data['userId'] ?? data['uid'] ?? '';
+        if (uid.isNotEmpty) {
+          var userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+          if (userDoc.exists && userDoc.data()?['isSync'] == false) {
+            print("⏸️ Bỏ qua Đơn hàng ${doc.id} do Tài khoản ($uid) chưa đồng bộ xong.");
+            continue; // Bỏ qua vòng lặp này, đơn hàng tiếp tục nằm chờ
+          }
+        }
 
         // QUAN TRỌNG: Lấy gói tin JSON chuẩn đã lưu lúc Checkout
         // Gói này chứa đúng các key mà C# cần: UserId, ChiTietDonHangs...
@@ -77,7 +173,9 @@ class SyncService {
     }
   }
 
+  // ==================================================================
   // --- 2. ĐỒNG BỘ YÊU CẦU THU GOM (Scrap) ---
+  // ==================================================================
   static Future<void> syncPendingScrapRequests() async {
     try {
       // B1: Lấy các yêu cầu chưa đồng bộ
@@ -92,6 +190,18 @@ class SyncService {
 
       for (var doc in snapshot.docs) {
         Map<String, dynamic> data = doc.data();
+
+        // -------------------------------------------------------------
+        // CHỐT CHẶN: Kiểm tra xem User của yêu cầu này đã lên Web chưa?
+        // -------------------------------------------------------------
+        String uid = data['userId'] ?? data['uid'] ?? '';
+        if (uid.isNotEmpty) {
+          var userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+          if (userDoc.exists && userDoc.data()?['isSync'] == false) {
+            print("⏸️ Bỏ qua Thu gom ${doc.id} do Tài khoản ($uid) chưa đồng bộ xong.");
+            continue; // Bỏ qua, chờ vòng lặp sau
+          }
+        }
 
         // Lấy gói tin JSON chuẩn C# (HoTen, SoDienThoai, KhoiLuong...)
         String? payload = data['sqlPayload'];

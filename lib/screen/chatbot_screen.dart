@@ -1,9 +1,10 @@
-import 'dart:io'; // Để dùng File
+import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart'; // Để dùng kIsWeb
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart'; // Để dùng XFile
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter_markdown/flutter_markdown.dart'; // ĐÃ THÊM THƯ VIỆN MARKDOWN
 import '../service/chat_service.dart';
 
 class ChatbotScreen extends StatefulWidget {
@@ -15,14 +16,18 @@ class ChatbotScreen extends StatefulWidget {
 
 class _ChatbotScreenState extends State<ChatbotScreen> {
   final TextEditingController _controller = TextEditingController();
+  final ImagePicker _picker = ImagePicker();
 
-  // Danh sách tin nhắn
   final List<Map<String, dynamic>> _messages = [
-    {'text': 'Xin chào! Mình có thể giúp gì cho bạn hôm nay?', 'isUser': false}
+    {
+      'text': 'Xin chào! Tôi có thể giúp gì cho bạn về thông tin nông sản và phụ phẩm hôm nay? Bạn cũng có thể tải ảnh lên để tôi nhận diện.',
+      'isUser': false
+    }
   ];
 
   bool _isLoading = false;
-  final ImagePicker _picker = ImagePicker();
+  XFile? _selectedImagePreview;
+
   bool _checkLogin() {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -34,12 +39,13 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text("Hủy"),
+              child: const Text("Hủy", style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
               onPressed: () {
                 Navigator.pop(context);
-                context.push('/login'); // Chuyển sang trang đăng nhập
+                context.push('/login');
               },
               child: const Text("Đăng nhập ngay"),
             ),
@@ -50,167 +56,278 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     }
     return true;
   }
-  // Gửi Text
-  void _sendText() async {
+
+  void _pickImage() async {
     if (!_checkLogin()) return;
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
+    final XFile? photo = await _picker.pickImage(source: ImageSource.gallery);
+    if (photo != null) {
+      setState(() {
+        _selectedImagePreview = photo;
+      });
+    }
+  }
 
+  void _clearPreviewImage() {
     setState(() {
-      _messages.add({'text': text, 'isUser': true});
-      _isLoading = true;
-    });
-    _controller.clear();
-
-    String reply = await ChatService.sendMessage(text);
-
-    setState(() {
-      _messages.add({'text': reply, 'isUser': false});
-      _isLoading = false;
+      _selectedImagePreview = null;
     });
   }
 
-  // Gửi Ảnh
-  void _pickAndSendImage() async {
-    // 1. Chọn ảnh (trả về XFile)
+  // ĐÃ SỬA: Lắng nghe Stream để cập nhật từng chữ
+  void _handleSend() async {
     if (!_checkLogin()) return;
-    final XFile? photo = await _picker.pickImage(source: ImageSource.gallery);
 
-    if (photo != null) {
-      setState(() {
-        // 2. Lưu nguyên cục XFile vào list
-        _messages.add({'image': photo, 'isUser': true});
-        _isLoading = true;
+    final text = _controller.text.trim();
+    final imageToSend = _selectedImagePreview;
+
+    if (text.isEmpty && imageToSend == null) return;
+
+    // 1. In tin nhắn của User
+    setState(() {
+      _messages.add({
+        'text': text.isNotEmpty ? text : null,
+        'image': imageToSend,
+        'isUser': true
       });
+      _isLoading = true; // Hiện "AI đang gõ..."
+      _controller.clear();
+      _selectedImagePreview = null;
+    });
 
-      // 3. Gửi XFile sang Service
-      String reply = await ChatService.sendImage(photo);
+    // 2. Tạo sẵn bong bóng chat rỗng cho AI
+    int aiMsgIndex = _messages.length;
+    setState(() {
+      _messages.add({'text': '', 'isUser': false});
+      _isLoading = false;
+    });
 
-      setState(() {
-        _messages.add({'text': reply, 'isUser': false});
-        _isLoading = false;
-      });
+    String fullReply = "";
+
+    try {
+      // 3. Lắng nghe Stream và ghép chữ vào
+      await for (String chunk in ChatService.sendMessageStream(text, image: imageToSend)) {
+        fullReply += chunk;
+        if (mounted) {
+          setState(() {
+            _messages[aiMsgIndex]['text'] = fullReply;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          if (fullReply.isEmpty) {
+            _messages[aiMsgIndex]['text'] = "Lỗi kết nối: $e";
+          }
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1E1E1E),
+      backgroundColor: const Color(0xFFF9F9F9),
       appBar: AppBar(
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Hỗ trợ trực tuyến", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Text("Thường trả lời trong vài giây", style: TextStyle(fontSize: 12, color: Colors.white70)),
+            Text("Trợ lý AI Nông nghiệp", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
+            Text("Llama 3 + Vision", style: TextStyle(fontSize: 12, color: Colors.grey)),
           ],
         ),
-        backgroundColor: const Color(0xFF0F172A),
-        foregroundColor: Colors.white,
-        elevation: 0,
+        backgroundColor: Colors.white,
+        elevation: 1,
+        iconTheme: const IconThemeData(color: Colors.black87),
       ),
       body: Column(
         children: [
-          // KHUNG CHAT
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: _messages.length + (_isLoading ? 1 : 0),
+              itemCount: _messages.length,
               itemBuilder: (context, index) {
-                // Hiển thị loading "Đang suy nghĩ..."
-                if (index == _messages.length) {
-                  return const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Padding(
-                      padding: EdgeInsets.only(left: 10, bottom: 10),
-                      child: Text("Đang suy nghĩ...", style: TextStyle(color: Colors.white54, fontStyle: FontStyle.italic)),
-                    ),
-                  );
-                }
-
                 final msg = _messages[index];
-                final isUser = msg['isUser'];
-
-                return Align(
-                  alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    padding: const EdgeInsets.all(12),
-                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                    decoration: BoxDecoration(
-                      gradient: isUser
-                          ? const LinearGradient(colors: [Color(0xFF0B84FF), Color(0xFF006EE6)], begin: Alignment.topCenter, end: Alignment.bottomCenter)
-                          : null,
-                      color: isUser ? null : Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(12),
-                        topRight: const Radius.circular(12),
-                        bottomLeft: isUser ? const Radius.circular(12) : const Radius.circular(0),
-                        bottomRight: isUser ? const Radius.circular(0) : const Radius.circular(12),
-                      ),
-                    ),
-                    // --- PHẦN QUAN TRỌNG ĐÃ SỬA ---
-                    child: msg.containsKey('image')
-                        ? ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: kIsWeb
-                          ? Image.network(
-                        // Trên Web: Ép kiểu về XFile lấy path (blob URL)
-                        (msg['image'] as XFile).path,
-                        width: 150,
-                        fit: BoxFit.cover,
-                        errorBuilder: (ctx, err, stack) => const Icon(Icons.broken_image, color: Colors.white),
-                      )
-                          : Image.file(
-                        // Trên Mobile: Ép kiểu về XFile lấy path, rồi tạo File (dart:io)
-                        File((msg['image'] as XFile).path),
-                        width: 150,
-                        fit: BoxFit.cover,
-                      ),
-                    )
-                        : Text(
-                      msg['text'],
-                      style: TextStyle(color: isUser ? Colors.white : const Color(0xFFE6EEF7)),
-                    ),
-                  ),
-                );
+                return _buildMessageBubble(msg);
               },
             ),
           ),
 
-          // KHUNG NHẬP LIỆU
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.only(left: 24, bottom: 12),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text("AI đang gõ...", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic, fontSize: 13)),
+              ),
+            ),
+
           Container(
-            padding: const EdgeInsets.all(10),
-            color: const Color(0xFF0F172A),
-            child: Row(
+            padding: const EdgeInsets.only(left: 16, right: 16, top: 12, bottom: 24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: Color(0xFFE5E5E5), width: 1)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.attach_file, color: Colors.white70),
-                  onPressed: _pickAndSendImage,
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: "Gõ tin nhắn...",
-                      hintStyle: const TextStyle(color: Colors.white38),
-                      filled: true,
-                      fillColor: Colors.white.withOpacity(0.05),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    ),
-                    onSubmitted: (_) => _sendText(),
+                if (_selectedImagePreview != null)
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: kIsWeb
+                              ? Image.network(_selectedImagePreview!.path, height: 80, width: 80, fit: BoxFit.cover)
+                              : Image.file(File(_selectedImagePreview!.path), height: 80, width: 80, fit: BoxFit.cover),
+                        ),
+                      ),
+                      Positioned(
+                        top: -8,
+                        right: -8,
+                        child: GestureDetector(
+                          onTap: _clearPreviewImage,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                            child: const Icon(Icons.close, color: Colors.white, size: 14),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.send, color: Color(0xFF0B84FF)),
-                  onPressed: _sendText,
+
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.image_outlined, color: Colors.grey),
+                      onPressed: _pickImage,
+                      tooltip: "Đính kèm ảnh",
+                    ),
+
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFFC4C7C5)),
+                        ),
+                        child: TextField(
+                          controller: _controller,
+                          minLines: 1,
+                          maxLines: 4,
+                          style: const TextStyle(color: Colors.black87),
+                          decoration: const InputDecoration(
+                            hintText: "Nhập câu hỏi hoặc đính kèm ảnh...",
+                            hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    Container(
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF10A37F),
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                        onPressed: _handleSend,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessageBubble(Map<String, dynamic> msg) {
+    final bool isUser = msg['isUser'];
+    final String? text = msg['text'];
+    final XFile? image = msg['image'];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          if (!isUser)
+            Container(
+              margin: const EdgeInsets.only(right: 12),
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: const Color(0xFF10A37F),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(Icons.auto_awesome, color: Colors.white, size: 18),
+            ),
+
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isUser ? const Color(0xFFE9EEF6) : Colors.transparent,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft: isUser ? const Radius.circular(16) : Radius.zero,
+                  bottomRight: isUser ? Radius.zero : const Radius.circular(16),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  if (image != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: kIsWeb
+                            ? Image.network(image.path, width: 200, fit: BoxFit.cover)
+                            : Image.file(File(image.path), width: 200, fit: BoxFit.cover),
+                      ),
+                    ),
+
+                  // ĐÃ SỬA: SỬ DỤNG MARKDOWN CHO AI, TEXT THƯỜNG CHO USER
+                  if (text != null && text.isNotEmpty)
+                    !isUser
+                        ? MarkdownBody(
+                      data: text
+                          .replaceAll(RegExp(r"<div[^>]*>"), "_")
+                          .replaceAll("</div>", "_\n\n")
+                          .replaceAll(RegExp(r"<br\s*/?>"), "\n"),
+                      styleSheet: MarkdownStyleSheet(
+                        p: const TextStyle(color: Color(0xFF1F1F1F), fontSize: 15, height: 1.5),
+                        strong: const TextStyle(color: Color(0xFF1F1F1F), fontWeight: FontWeight.bold),
+                        em: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic, fontSize: 13),
+                      ),
+                    )
+                        : Text(
+                      text,
+                      style: const TextStyle(color: Color(0xFF1F1F1F), fontSize: 15, height: 1.5),
+                    ),
+                ],
+              ),
+            ),
+          ),
+
+          if (!isUser) const SizedBox(width: 40),
         ],
       ),
     );

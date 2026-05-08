@@ -1,5 +1,7 @@
 import 'package:doandidonghoa/model/product_model.dart';
 import 'package:doandidonghoa/screen/cart_screen.dart';
+import 'package:doandidonghoa/screen/my_orders_screen.dart';
+import 'package:doandidonghoa/screen/my_scrap_requests_screen.dart';
 import 'package:doandidonghoa/screen/product_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -76,6 +78,16 @@ final _router = GoRouter(
 
         // 5. Cá nhân
         GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
+        GoRoute(
+          path: '/my_orders_screen', // Phải khớp 100% với chữ bạn ghi trong nút bấm
+          builder: (context, state) => const MyOrdersScreen(),
+        ),
+
+        // 🔴 2. THÊM ĐƯỜNG DẪN TRANG THU GOM VÀO ĐÂY
+        GoRoute(
+          path: '/my-scrap-requests_screen', // Phải khớp 100% với chữ bạn ghi trong nút bấm
+          builder: (context, state) => const MyScrapRequestsScreen(),
+        ),
         GoRoute(path: '/admin_xnk', builder: (context, state) => const AdminXNKScreen()),
         GoRoute(path: '/owner_dashboard', builder: (context, state) => const OwnerDashboardScreen()),
         GoRoute(path: '/admin_chat', builder: (context, state) => const AdminChatScreen()),

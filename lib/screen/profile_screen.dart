@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../theme_notifier.dart';
-
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
@@ -15,7 +14,77 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _user = FirebaseAuth.instance.currentUser;
+  Future<void> _showAddressDialog() async {
+    // 1. Lấy dữ liệu cũ từ Firestore lên để điền sẵn vào ô nhập
+    final doc = await FirebaseFirestore.instance.collection('users').doc(_user!.uid).get();
+    final data = doc.data() ?? {};
 
+    final nameCtrl = TextEditingController(text: data['fullName'] ?? _user!.displayName ?? '');
+    final phoneCtrl = TextEditingController(text: data['phoneNumber'] ?? '');
+    final addressCtrl = TextEditingController(text: data['address'] ?? ''); // Thêm trường address vào Firebase
+
+    final isDarkMode = ref.read(themeProvider) == ThemeMode.dark;
+
+    if (!mounted) return;
+
+    // 2. Hiển thị Dialog
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Địa chỉ nhận hàng mặc định', style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: "Họ và tên", prefixIcon: Icon(Icons.person, color: Colors.green)),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: "Số điện thoại", prefixIcon: Icon(Icons.phone, color: Colors.green)),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: addressCtrl,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: "Địa chỉ chi tiết", prefixIcon: Icon(Icons.location_on, color: Colors.green)),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Hủy', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+              onPressed: () async {
+                // 3. Lưu thông tin vào Firestore
+                await FirebaseFirestore.instance.collection('users').doc(_user!.uid).set({
+                  'fullName': nameCtrl.text.trim(),
+                  'phoneNumber': phoneCtrl.text.trim(),
+                  'address': addressCtrl.text.trim(),
+                }, SetOptions(merge: true));
+
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã lưu địa chỉ thành công!'), backgroundColor: Colors.green));
+                }
+              },
+              child: const Text('Lưu thông tin'),
+            ),
+          ],
+        );
+      },
+    );
+  }
   Future<void> _signOut(BuildContext context) async {
     try {
       await FirebaseAuth.instance.signOut();
@@ -25,6 +94,58 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         SnackBar(content: Text('Lỗi đăng xuất: $e'), backgroundColor: Colors.red),
       );
     }
+  }
+
+  // --- HÀM MỞ POPUP LIÊN HỆ HỖ TRỢ ---
+  void _showSupportDialog() {
+    final isDarkMode = ref.read(themeProvider) == ThemeMode.dark;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.support_agent, color: Colors.green, size: 28),
+              const SizedBox(width: 8),
+              Text('Liên hệ hỗ trợ', style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontWeight: FontWeight.bold, fontSize: 18)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Nếu bạn gặp vấn đề về đơn hàng hoặc ứng dụng, vui lòng liên hệ với chúng tôi qua:',
+                  style: TextStyle(color: isDarkMode ? Colors.white70 : Colors.black87, fontSize: 14)),
+              const SizedBox(height: 16),
+              _buildContactLine(Icons.phone, 'Hotline: 1900 1234', isDarkMode),
+              const SizedBox(height: 8),
+              _buildContactLine(Icons.email, 'Email: support@nongsan.com', isDarkMode),
+              const SizedBox(height: 8),
+              _buildContactLine(Icons.chat_bubble_outline, 'Mở tính năng Trợ lý AI để chat trực tiếp', isDarkMode),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Đóng', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildContactLine(IconData icon, String text, bool isDarkMode) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: Colors.green),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text, style: TextStyle(color: isDarkMode ? Colors.white : Colors.black, fontSize: 13, fontWeight: FontWeight.w500))),
+      ],
+    );
   }
 
   @override
@@ -42,12 +163,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         backgroundColor: isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
         elevation: 0,
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.settings_outlined, color: isDarkMode ? Colors.white : Colors.black),
-            onPressed: () {},
-          ),
-        ],
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance.collection('users').doc(_user!.uid).snapshots(),
@@ -70,7 +185,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
                 const SizedBox(height: 20),
 
-                // --- PHẦN 2: ĐƠN HÀNG MỚI NHẤT (LẤY REALTIME) ---
+                // --- PHẦN 2: ĐƠN HÀNG MỚI NHẤT ---
                 _buildNewestOrderCard(isDarkMode),
 
                 const SizedBox(height: 20),
@@ -127,9 +242,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  // --- WIDGET MỚI: THỐNG KÊ REALTIME ---
   Widget _buildOrderStatsSection(bool isDarkMode) {
-    // Kết hợp Stream: Lấy cả DonHang và ThuGom
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('DonHang').where('uid', isEqualTo: _user!.uid).snapshots(),
       builder: (context, orderSnapshot) {
@@ -137,23 +250,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             stream: FirebaseFirestore.instance.collection('ThuGom').where('uid', isEqualTo: _user!.uid).snapshots(),
             builder: (context, scrapSnapshot) {
 
-              // Tính toán số lượng badge
               int pendingCount = 0;
-              int shippingCount = 0;
               int scrapCount = 0;
 
               if (orderSnapshot.hasData) {
                 final orders = orderSnapshot.data!.docs;
                 pendingCount = orders.where((d) {
                   final st = (d.data() as Map)['trangThai'] ?? '';
-                  return st == 'Chờ xác nhận' || st == 'Chờ đồng bộ' || st == 'Đang xử lý';
+                  // Đơn mua bao gồm cả đơn đang chờ và đang giao để khách theo dõi chung
+                  return st != 'Hoàn thành' && st != 'Đã hủy';
                 }).length;
-
-                shippingCount = orders.where((d) => (d.data() as Map)['trangThai'] == 'Đang giao').length;
               }
 
               if (scrapSnapshot.hasData) {
-                // Đếm số yêu cầu thu gom đang chờ/xử lý
                 scrapCount = scrapSnapshot.data!.docs.where((d) {
                   final st = (d.data() as Map)['trangThaiXuLy'] ?? '';
                   return st != 'HoanThanh' && st != 'Huy';
@@ -172,26 +281,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('Hoạt động của tôi', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDarkMode ? Colors.white : Colors.black)),
-                        // Nút này có thể dẫn đến trang lịch sử chi tiết
-                        TextButton(
-                          onPressed: () {
-                            // TODO: Navigate to Order History Screen
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Tính năng xem lịch sử đang phát triển")));
-                          },
-                          child: const Text('Xem tất cả >', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                        ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 15),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly, // Dùng spaceEvenly cho 2 nút
                       children: [
-                        _buildOrderStatusItem(Icons.assignment_outlined, 'Đơn mua', isDarkMode, badgeCount: pendingCount),
-                        _buildOrderStatusItem(Icons.local_shipping_outlined, 'Vận chuyển', isDarkMode, badgeCount: shippingCount),
-                        // Thay đổi icon đánh giá thành icon Thu Gom để khách theo dõi đơn bán
-                        _buildOrderStatusItem(Icons.recycling, 'Thu gom', isDarkMode, badgeCount: scrapCount),
-                        _buildOrderStatusItem(Icons.history, 'Lịch sử', isDarkMode),
+                        _buildOrderStatusItem(
+                          icon: Icons.shopping_bag_outlined,
+                          label: 'Đơn mua',
+                          isDarkMode: isDarkMode,
+                          badgeCount: pendingCount,
+                          onTap: () => context.push('/my_orders_screen'),
+                        ),
+                        _buildOrderStatusItem(
+                          icon: Icons.recycling,
+                          label: 'Thu gom',
+                          isDarkMode: isDarkMode,
+                          badgeCount: scrapCount,
+                          onTap: () => context.push('/my-scrap-requests_screen'),
+                        ),
                       ],
                     ),
                   ],
@@ -203,48 +312,49 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _buildOrderStatusItem(IconData icon, String label, bool isDarkMode, {int badgeCount = 0}) {
-    return Column(
-      children: [
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isDarkMode ? Colors.grey.shade800 : Colors.grey.shade50,
-                shape: BoxShape.circle,
+  Widget _buildOrderStatusItem({required IconData icon, required String label, required bool isDarkMode, int badgeCount = 0, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDarkMode ? Colors.grey.shade800 : Colors.grey.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 26, color: isDarkMode ? Colors.white70 : Colors.green.shade700),
               ),
-              child: Icon(icon, size: 24, color: isDarkMode ? Colors.white70 : Colors.green.shade700),
-            ),
-            if (badgeCount > 0)
-              Positioned(
-                right: -2,
-                top: -2,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 1.5)
-                  ),
-                  child: Text(
-                      badgeCount > 9 ? '9+' : '$badgeCount',
-                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)
+              if (badgeCount > 0)
+                Positioned(
+                  right: -2,
+                  top: -2,
+                  child: Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5)
+                    ),
+                    child: Text(
+                        badgeCount > 9 ? '9+' : '$badgeCount',
+                        style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)
+                    ),
                   ),
                 ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(label, style: TextStyle(fontSize: 12, color: isDarkMode ? Colors.white54 : Colors.black87)),
-      ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: isDarkMode ? Colors.white54 : Colors.black87)),
+        ],
+      ),
     );
   }
 
-  // --- WIDGET MỚI: THẺ ĐƠN HÀNG MỚI NHẤT ---
   Widget _buildNewestOrderCard(bool isDarkMode) {
-    // Lấy 1 đơn hàng mới nhất của user này
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('DonHang')
@@ -254,18 +364,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const SizedBox(); // Ẩn đi nếu chưa có đơn nào
+          return const SizedBox();
         }
 
         final doc = snapshot.data!.docs.first;
         final data = doc.data() as Map<String, dynamic>;
 
-        // Parse dữ liệu an toàn
         final status = data['trangThai'] ?? 'Chờ xử lý';
         final total = data['tongTien'] ?? 0;
         final formatCurrency = NumberFormat.currency(locale: 'vi_VN', symbol: 'đ');
 
-        // Lấy thông tin sản phẩm đầu tiên để hiển thị ảnh demo
         final items = (data['items'] as List<dynamic>?);
         String firstItemName = "Đơn hàng";
         String firstItemImage = "";
@@ -296,7 +404,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Ảnh sản phẩm
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: firstItemImage.isNotEmpty
@@ -365,7 +472,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           'Mã đơn: ${data['maDonHang'] ?? '...'}',
                           style: const TextStyle(color: Colors.grey, fontSize: 12)
                       ),
-                      // Kiểm tra Sync: Nếu isSync = false thì báo lỗi
                       if (data['isSync'] == false)
                         const Row(
                           children: [
@@ -389,7 +495,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (status.contains('Hủy')) return Colors.red;
     if (status.contains('Hoàn thành') || status.contains('Giao thành công')) return Colors.green;
     if (status.contains('Đang giao')) return Colors.blue;
-    return Colors.orange; // Chờ xử lý, Chờ xác nhận...
+    return Colors.orange;
   }
 
   Widget _buildMenuList(bool isDarkMode) {
@@ -400,8 +506,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
       child: Column(
         children: [
-          _buildMenuItem(Icons.location_on_outlined, 'Địa chỉ giao hàng', isDarkMode),
-          _buildMenuItem(Icons.confirmation_num_outlined, 'Ví Voucher / Điểm thưởng', isDarkMode),
+          _buildMenuItem(Icons.location_on_outlined, 'Địa chỉ giao hàng', isDarkMode, onTap: _showAddressDialog),
           ListTile(
             leading: Icon(isDarkMode ? Icons.dark_mode : Icons.light_mode, color: Colors.green),
             title: Text('Chế độ tối', style: TextStyle(fontSize: 14, color: isDarkMode ? Colors.white : Colors.black)),
@@ -413,18 +518,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               activeColor: Colors.green,
             ),
           ),
-          _buildMenuItem(Icons.help_outline, 'Trung tâm trợ giúp', isDarkMode),
+          // Thay Trung tâm trợ giúp bằng Popup Liên hệ
+          _buildMenuItem(Icons.headset_mic_outlined, 'Liên hệ hỗ trợ', isDarkMode, onTap: _showSupportDialog),
         ],
       ),
     );
   }
 
-  Widget _buildMenuItem(IconData icon, String title, bool isDarkMode) {
+  Widget _buildMenuItem(IconData icon, String title, bool isDarkMode, {required VoidCallback onTap}) {
     return ListTile(
       leading: Icon(icon, color: Colors.green),
       title: Text(title, style: TextStyle(fontSize: 14, color: isDarkMode ? Colors.white : Colors.black)),
       trailing: const Icon(Icons.chevron_right, size: 20, color: Colors.grey),
-      onTap: () {},
+      onTap: onTap,
     );
   }
 

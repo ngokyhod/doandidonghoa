@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart'; // Cần thêm package intl vào pubspec.yaml để format tiền
 import '../model/cart_item_model.dart';
@@ -44,7 +45,32 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String formatCurrency(double amount) {
     return NumberFormat.currency(locale: 'vi_VN', symbol: '₫').format(amount);
   }
+  Future<void> _fillSavedAddress() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        setState(() {
+          _nameController.text = data['fullName'] ?? _nameController.text;
+          _phoneController.text = data['phoneNumber'] ?? _phoneController.text;
+          _addressController.text = data['address'] ?? _addressController.text; // Kéo thêm cái address về
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("✅ Đã điền thông tin mặc định"), backgroundColor: Colors.green),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Chưa có thông tin. Vui lòng vào Hồ sơ để lưu."), backgroundColor: Colors.orange),
+        );
+      }
+    } catch (e) {
+      print("Lỗi kéo thông tin: $e");
+    }
+  }
   @override
   void initState() {
     super.initState();
@@ -185,7 +211,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               const SizedBox(height: 24),
 
               // --- PHẦN 2: THÔNG TIN GIAO HÀNG (Tương ứng cột phải HTML) ---
-              const Text("Thông tin giao hàng", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Thông tin giao hàng", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
+
+                  // 🔴 THÊM NÚT ĐIỀN TỰ ĐỘNG Ở ĐÂY
+                  TextButton.icon(
+                    onPressed: _fillSavedAddress,
+                    icon: const Icon(Icons.flash_on, color: Colors.orange, size: 18),
+                    label: const Text("Dùng sổ địa chỉ", style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                  )
+                ],
+              ),
               const SizedBox(height: 10),
 
               // Họ tên
